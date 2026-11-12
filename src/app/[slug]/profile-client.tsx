@@ -224,8 +224,8 @@ export default function ProfileClient({ slug }: { slug: string }) {
     e.preventDefault();
     if (!selectedDateStr || !selectedSlot) return;
 
-    if (!customerName || !customerPhone) {
-      setBookingError("Por favor completa tu nombre y número de WhatsApp.");
+    if (!customerName || !customerPhone || !customerEmail || !customerEmail.includes("@")) {
+      setBookingError("Por favor completá tu nombre, WhatsApp y un correo electrónico válido.");
       return;
     }
 
@@ -481,7 +481,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
               </div>
               <h2 className={`text-base font-bold ${theme.titleText}`}>¡Turno Agendado!</h2>
               <p className={`text-xs mt-0.5 font-light ${theme.subText}`}>
-                Tu reserva ha quedado registrada en el sistema.
+                Tu reserva quedó registrada. Te enviamos la confirmación por correo electrónico.
               </p>
 
               <div className={`mt-4 p-4 rounded-xl border text-left space-y-2 text-xs ${theme.summaryBg}`}>
@@ -769,13 +769,14 @@ export default function ProfileClient({ slug }: { slug: string }) {
 
                   <div>
                     <label className={`block text-[11px] font-medium mb-1 ${theme.subText}`}>
-                      Correo Electrónico (opcional)
+                      Correo Electrónico *
                     </label>
                     <input
                       type="email"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
                       placeholder="sofia@ejemplo.com"
+                      required
                       className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${theme.inputCls}`}
                     />
                   </div>

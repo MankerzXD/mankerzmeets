@@ -1,8 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { Resend } from "resend";
 import { randomInt } from "node:crypto";
 import { prisma } from "./prisma";
+import { sendOtpEmail } from "./emails";
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -66,43 +66,6 @@ export class OtpRateLimitError extends Error {
   }
 }
 
-async function sendOtpEmailWithResend(email: string, code: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "RESEND_API_KEY no está configurada. Configurala en las variables de entorno para enviar códigos OTP reales."
-    );
-  }
-
-  const fromEmail =
-    process.env.RESEND_FROM_EMAIL || "Mankerz Meet <onboarding@resend.dev>";
-
-  const resend = new Resend(apiKey);
-  const { error } = await resend.emails.send({
-    from: fromEmail,
-    to: [email],
-    subject: `${code} es tu código de acceso a Mankerz Meet`,
-    html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #fafafa; padding: 40px 20px;">
-        <div style="max-width: 420px; margin: 0 auto; background-color: #121215; border: 1px solid #27272a; border-radius: 16px; padding: 32px; text-align: center;">
-          <div style="width: 36px; height: 36px; background-color: #ffffff; color: #09090b; border-radius: 8px; font-weight: 700; font-size: 16px; line-height: 36px; margin: 0 auto 16px;">M</div>
-          <h1 style="font-size: 18px; font-weight: 600; margin: 0 0 8px; color: #ffffff;">Código de verificación</h1>
-          <p style="font-size: 13px; color: #a1a1aa; margin: 0 0 24px;">Ingresá este código de 6 dígitos para acceder a tu cuenta en Mankerz Meet.</p>
-          <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; font-family: monospace; font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #ffffff; margin-bottom: 24px;">
-            ${code}
-          </div>
-          <p style="font-size: 11px; color: #71717a; margin: 0;">Este código expira en 10 minutos. Si no solicitaste este acceso, podés ignorar este correo.</p>
-        </div>
-      </div>
-    `,
-    text: `Tu código de acceso a Mankerz Meet es: ${code}. Expira en 10 minutos.`,
-  });
-
-  if (error) {
-    throw new Error(`Error al enviar email con Resend: ${error.message}`);
-  }
-}
-
 export async function generateAndSendOtp(email: string): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
 
@@ -147,7 +110,7 @@ export async function generateAndSendOtp(email: string): Promise<void> {
   });
 
   try {
-    await sendOtpEmailWithResend(cleanEmail, code);
+    await sendOtpEmail(cleanEmail, code);
   } catch (err) {
     // Mark OTP as used if email delivery failed so it cannot linger
     await prisma.otpCode.update({

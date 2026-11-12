@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { formatDateSpanish } from "@/lib/utils";
 import { generateAvailableSlots } from "@/lib/time-slots";
+import { sendBookingNotificationEmails } from "@/lib/emails";
 
 export async function POST(
   req: Request,
@@ -19,9 +20,21 @@ export async function POST(
       notes,
     } = body;
 
-    if (!slug || !date || !startTime || !customerName || !customerPhone) {
+    if (
+      !slug ||
+      !date ||
+      !startTime ||
+      !customerName ||
+      !customerPhone ||
+      !customerEmail ||
+      typeof customerEmail !== "string" ||
+      !customerEmail.includes("@")
+    ) {
       return NextResponse.json(
-        { error: "Faltan datos obligatorios para confirmar el turno." },
+        {
+          error:
+            "Por favor completá tu nombre, WhatsApp y un correo electrónico válido para recibir la confirmación.",
+        },
         { status: 400 }
       );
     }
@@ -29,7 +42,10 @@ export async function POST(
     const cleanSlug = slug.toLowerCase().trim();
     const profile = await prisma.profile.findUnique({
       where: { slug: cleanSlug },
-      include: { availabilities: true },
+      include: {
+        availabilities: true,
+        user: { select: { email: true } },
+      },
     });
 
     if (!profile) {
@@ -137,10 +153,27 @@ export async function POST(
         ? `https://wa.me/${professionalPhone}?text=${waText}`
         : null;
 
+    // Notify both the profile owner and the end customer via Resend
+    const emailStatus = await sendBookingNotificationEmails({
+      ownerEmail: profile.user.email,
+      profileName: profile.name,
+      profileSlug: profile.slug,
+      formattedDate,
+      date,
+      startTime,
+      endTime,
+      customerName: customerName.trim(),
+      customerEmail: customerEmail.trim(),
+      customerPhone: customerPhone.trim(),
+      notes: notes ? notes.trim() : null,
+      whatsappUrl,
+    });
+
     return NextResponse.json({
       success: true,
       booking: result.booking,
       whatsappUrl,
+      emailStatus,
       message: "¡Turno agendado con éxito!",
     });
   } catch (error) {
