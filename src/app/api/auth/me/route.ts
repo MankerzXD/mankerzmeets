@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, ensureUserProfile } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -26,13 +26,16 @@ export async function GET() {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
+    const profile =
+      user.profile ?? (await ensureUserProfile(user.id, user.email));
+
     return NextResponse.json({
       authenticated: true,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        profile: user.profile,
+        profile,
       },
     });
   } catch (error) {

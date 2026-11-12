@@ -66,14 +66,18 @@ export async function PUT(req: Request) {
       slug,
     } = body;
 
-    const cleanSlug = slug
-      ? slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "")
-      : undefined;
+    const cleanSlug =
+      typeof slug === "string"
+        ? slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "")
+        : undefined;
 
     if (cleanSlug !== undefined) {
       if (cleanSlug.length < 3) {
         return NextResponse.json(
-          { error: "El enlace debe tener al menos 3 caracteres." },
+          {
+            error:
+              "El enlace público (slug) debe tener al menos 3 caracteres válidos (letras, números o guiones).",
+          },
           { status: 400 }
         );
       }

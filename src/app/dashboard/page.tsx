@@ -235,27 +235,16 @@ export default function TenantDashboard() {
     }
   };
 
-  const handleSaveProfile = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSaveProfile = async (
+    payload: Record<string, unknown>
+  ) => {
     setSaving(true);
 
     try {
       const res = await fetch("/api/dashboard/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          title,
-          bio,
-          avatarUrl: avatarUrl || null,
-          bannerUrl: bannerUrl || null,
-          template,
-          whatsapp,
-          instagram,
-          timezone,
-          slotDuration,
-          slug,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -695,7 +684,7 @@ export default function TenantDashboard() {
 
                   <button
                     onClick={async () => {
-                      await handleSaveProfile();
+                      await handleSaveProfile({ timezone, slotDuration });
                       await handleSaveAvailability();
                     }}
                     disabled={saving}
@@ -806,7 +795,21 @@ export default function TenantDashboard() {
 
         {/* TAB 3: VISUAL CUSTOMIZATION */}
         {activeTab === "DESIGN" && (
-          <form onSubmit={handleSaveProfile} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveProfile({
+                name,
+                title,
+                bio,
+                avatarUrl: avatarUrl || null,
+                bannerUrl: bannerUrl || null,
+                template,
+                slug,
+              });
+            }}
+            className="space-y-4"
+          >
             <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -1005,11 +1008,21 @@ export default function TenantDashboard() {
                     <input
                       type="text"
                       value={slug}
-                      onChange={(e) => setSlug(e.target.value)}
+                      minLength={3}
+                      onChange={(e) =>
+                        setSlug(
+                          e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-_]/g, "")
+                        )
+                      }
                       required
                       className="w-full py-2 px-1 bg-transparent text-xs text-white outline-none font-mono"
                     />
                   </div>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    Mínimo 3 caracteres (solo letras minúsculas, números o guiones).
+                  </p>
                 </div>
               </div>
             </div>
@@ -1018,7 +1031,13 @@ export default function TenantDashboard() {
 
         {/* TAB 4: CONTACT & SOCIALS */}
         {activeTab === "CONTACT" && (
-          <form onSubmit={handleSaveProfile} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveProfile({ whatsapp, instagram });
+            }}
+            className="space-y-4"
+          >
             <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
               <div className="flex items-center justify-between mb-6">
                 <div>

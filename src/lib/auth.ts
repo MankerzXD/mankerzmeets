@@ -121,6 +121,60 @@ export async function generateAndSendOtp(email: string): Promise<void> {
   }
 }
 
+export function buildDefaultProfileData(cleanEmail: string) {
+  const baseSlug =
+    cleanEmail
+      .split("@")[0]
+      .replace(/[^a-z0-9]/gi, "-")
+      .toLowerCase()
+      .replace(/^-+|-+$/g, "") || "usuario";
+
+  const reserved = new Set([
+    "admin",
+    "dashboard",
+    "login",
+    "api",
+    "auth",
+    "register",
+  ]);
+  const safePrefix = reserved.has(baseSlug) ? `${baseSlug}-perfil` : baseSlug;
+  const uniqueSlug = `${safePrefix}-${randomInt(100, 999)}`;
+
+  return {
+    slug: uniqueSlug,
+    name: cleanEmail.split("@")[0],
+    title: "Profesional",
+    bio: "Reservá tu turno online de forma rápida.",
+    whatsapp: "",
+    template: "MINIMAL_DARK",
+    status: "ACTIVE",
+    slotDuration: 30,
+    availabilities: {
+      create: [
+        { dayOfWeek: 1, startTime: "09:00", endTime: "18:00", isActive: true },
+        { dayOfWeek: 2, startTime: "09:00", endTime: "18:00", isActive: true },
+        { dayOfWeek: 3, startTime: "09:00", endTime: "18:00", isActive: true },
+        { dayOfWeek: 4, startTime: "09:00", endTime: "18:00", isActive: true },
+        { dayOfWeek: 5, startTime: "09:00", endTime: "18:00", isActive: true },
+      ],
+    },
+  };
+}
+
+export async function ensureUserProfile(userId: string, email: string) {
+  return prisma.profile.create({
+    data: {
+      userId,
+      ...buildDefaultProfileData(email.trim().toLowerCase()),
+    },
+    include: {
+      availabilities: {
+        orderBy: { dayOfWeek: "asc" },
+      },
+    },
+  });
+}
+
 export async function verifyOtp(
   email: string,
   code: string
@@ -163,58 +217,28 @@ export async function verifyOtp(
   });
 
   if (!user) {
-    const baseSlug =
-      cleanEmail
-        .split("@")[0]
-        .replace(/[^a-z0-9]/gi, "-")
-        .toLowerCase()
-        .replace(/^-+|-+$/g, "") || "usuario";
-
-    const reserved = new Set([
-      "admin",
-      "dashboard",
-      "login",
-      "api",
-      "auth",
-      "register",
-    ]);
-    const safePrefix = reserved.has(baseSlug) ? `${baseSlug}-perfil` : baseSlug;
-    const uniqueSlug = `${safePrefix}-${randomInt(100, 999)}`;
-
     user = await prisma.user.create({
       data: {
         email: cleanEmail,
         role,
         profile: {
-          create: {
-            slug: uniqueSlug,
-            name: cleanEmail.split("@")[0],
-            title: "Profesional",
-            bio: "Reservá tu turno online de forma rápida.",
-            whatsapp: "",
-            template: "MINIMAL_DARK",
-            status: "ACTIVE",
-            slotDuration: 30,
-            availabilities: {
-              create: [
-                { dayOfWeek: 1, startTime: "09:00", endTime: "18:00", isActive: true },
-                { dayOfWeek: 2, startTime: "09:00", endTime: "18:00", isActive: true },
-                { dayOfWeek: 3, startTime: "09:00", endTime: "18:00", isActive: true },
-                { dayOfWeek: 4, startTime: "09:00", endTime: "18:00", isActive: true },
-                { dayOfWeek: 5, startTime: "09:00", endTime: "18:00", isActive: true },
-              ],
-            },
-          },
+          create: buildDefaultProfileData(cleanEmail),
         },
       },
       include: { profile: true },
     });
-  } else if (isSuperAdmin(cleanEmail) && user.role !== "SUPERADMIN") {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: { role: "SUPERADMIN" },
-      include: { profile: true },
-    });
+  } else {
+    if (isSuperAdmin(cleanEmail) && user.role !== "SUPERADMIN") {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "SUPERADMIN" },
+        include: { profile: true },
+      });
+    }
+    if (!user.profile) {
+      const createdProfile = await ensureUserProfile(user.id, cleanEmail);
+      user = { ...user, profile: createdProfile };
+    }
   }
 
   return {
