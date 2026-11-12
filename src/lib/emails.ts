@@ -246,3 +246,4 @@ export async function sendBookingNotificationEmails({
     customerSent: results.find((r) => r.role === "customer")?.ok ?? false,
   };
 }
+
