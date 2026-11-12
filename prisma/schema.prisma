@@ -1,0 +1,94 @@
+// Prisma Schema for Mankerz Meet (meet.mankerz.xyz)
+// Multi-tenant appointment booking SaaS (PostgreSQL / Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      String   @default("USER") // "USER" | "SUPERADMIN"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile Profile?
+  otps    OtpCode[]
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, used])
+}
+
+model Profile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug         String   @unique // Public URL handle: meet.mankerz.xyz/[slug]
+  name         String
+  title        String   // Profession / Headline
+  bio          String?  // Pitch / description
+  avatarUrl    String?  // Profile picture URL (Supabase Storage)
+  bannerUrl    String?  // Background banner URL (Supabase Storage)
+  template     String   @default("MINIMAL_DARK") // "MINIMAL_DARK" | "CLEAN_EDITORIAL"
+  whatsapp     String   @default("") // Format with country code (e.g., "5491122334455")
+  instagram    String?  // Instagram username without @
+  timezone     String   @default("America/Argentina/Buenos_Aires")
+  status       String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" (SuperAdmin billing control)
+  slotDuration Int      @default(30) // Booking slot duration in minutes
+  bufferTime   Int      @default(0)  // Buffer between slots in minutes
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  availabilities Availability[]
+  bookings       Booking[]
+}
+
+model Availability {
+  id             String   @id @default(cuid())
+  profileId      String
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  dayOfWeek      Int      // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime      String   // "09:00"
+  endTime        String   // "18:00"
+  isActive       Boolean  @default(true)
+  breakStartTime String?  // Optional break start (e.g., "13:00")
+  breakEndTime   String?  // Optional break end (e.g., "14:00")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([profileId, dayOfWeek])
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  profileId     String
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  customerName  String
+  customerEmail String
+  customerPhone String
+  date          String   // "YYYY-MM-DD"
+  startTime     String   // "10:00"
+  endTime       String   // "10:30"
+  notes         String?
+  status        String   @default("CONFIRMED") // "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([profileId, date])
+}
