@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Calendar,
   User,
+  Users,
   Copy,
   ExternalLink,
   CheckCircle2,
@@ -45,6 +46,17 @@ interface ServiceItem {
   isActive: boolean;
 }
 
+interface StaffMemberItem {
+  id: string;
+  name: string;
+  role: string | null;
+  avatarUrl: string | null;
+  email: string | null;
+  phone: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 interface ProfileData {
   id: string;
   slug: string;
@@ -61,11 +73,14 @@ interface ProfileData {
   slotDuration: number;
   availabilities: DaySchedule[];
   services?: ServiceItem[];
+  staffMembers?: StaffMemberItem[];
 }
 
 interface BookingItem {
   id: string;
   serviceName: string | null;
+  staffMemberName?: string | null;
+  staffMemberId?: string | null;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
@@ -99,7 +114,8 @@ export default function TenantDashboard() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "AVAILABILITY" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+  const [staffMembers, setStaffMembers] = useState<StaffMemberItem[]>([]);
+  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "STAFF" | "AVAILABILITY" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
 
   // Service form states
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -108,6 +124,16 @@ export default function TenantDashboard() {
   const [serviceDuration, setServiceDuration] = useState(30);
   const [servicePrice, setServicePrice] = useState("");
   const [savingService, setSavingService] = useState(false);
+
+  // Staff form states
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [staffName, setStaffName] = useState("");
+  const [staffRole, setStaffRole] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPhone, setStaffPhone] = useState("");
+  const [staffAvatarUrl, setStaffAvatarUrl] = useState("");
+  const [savingStaff, setSavingStaff] = useState(false);
+  const [uploadingStaffPhoto, setUploadingStaffPhoto] = useState(false);
 
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -155,6 +181,7 @@ export default function TenantDashboard() {
           setTimezone(p.timezone || "America/Argentina/Buenos_Aires");
           setSlotDuration(p.slotDuration || 30);
           setServices(p.services || []);
+          setStaffMembers(p.staffMembers || []);
 
           const fullWeek: DaySchedule[] = [];
           for (let day = 0; day <= 6; day++) {
@@ -408,6 +435,125 @@ export default function TenantDashboard() {
     }
   };
 
+  const resetStaffForm = () => {
+    setEditingStaffId(null);
+    setStaffName("");
+    setStaffRole("");
+    setStaffEmail("");
+    setStaffPhone("");
+    setStaffAvatarUrl("");
+  };
+
+  const handleSubmitStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingStaff(true);
+    try {
+      const isEdit = Boolean(editingStaffId);
+      const res = await fetch("/api/dashboard/staff", {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(isEdit ? { id: editingStaffId } : {}),
+          name: staffName,
+          role: staffRole,
+          email: staffEmail,
+          phone: staffPhone,
+          avatarUrl: staffAvatarUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar el profesional");
+
+      if (isEdit) {
+        setStaffMembers((prev) =>
+          prev.map((s) => (s.id === data.staffMember.id ? data.staffMember : s))
+        );
+        showNotification("success", "Profesional actualizado");
+      } else {
+        setStaffMembers((prev) => [...prev, data.staffMember]);
+        showNotification("success", "Profesional agregado al equipo");
+      }
+      resetStaffForm();
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "No se pudo guardar el profesional"
+      );
+    } finally {
+      setSavingStaff(false);
+    }
+  };
+
+  const handleToggleStaff = async (staff: StaffMemberItem) => {
+    try {
+      const res = await fetch("/api/dashboard/staff", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: staff.id, isActive: !staff.isActive }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al actualizar estado");
+      setStaffMembers((prev) =>
+        prev.map((s) => (s.id === staff.id ? data.staffMember : s))
+      );
+      showNotification(
+        "success",
+        !staff.isActive ? "Profesional activado" : "Profesional pausado"
+      );
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al cambiar estado"
+      );
+    }
+  };
+
+  const handleDeleteStaff = async (id: string) => {
+    if (!confirm("¿Seguro que querés eliminar este profesional del equipo?")) return;
+    try {
+      const res = await fetch(`/api/dashboard/staff?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al eliminar profesional");
+      setStaffMembers((prev) => prev.filter((s) => s.id !== id));
+      if (editingStaffId === id) resetStaffForm();
+      showNotification("success", "Profesional eliminado del equipo");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "No se pudo eliminar el profesional"
+      );
+    }
+  };
+
+  const handleUploadStaffPhoto = async (file: File) => {
+    setUploadingStaffPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("kind", "avatar");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al subir imagen");
+      setStaffAvatarUrl(data.url);
+      showNotification("success", "Foto del profesional subida");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al subir foto"
+      );
+    } finally {
+      setUploadingStaffPhoto(false);
+    }
+  };
+
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -609,6 +755,18 @@ export default function TenantDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab("STAFF")}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "STAFF"
+                ? "bg-white text-zinc-950 font-semibold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Equipo ({staffMembers.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("AVAILABILITY")}
             className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
               activeTab === "AVAILABILITY"
@@ -707,11 +865,19 @@ export default function TenantDashboard() {
                       </div>
 
                       <div className="text-sm font-semibold text-white">{b.customerName}</div>
-                      {b.serviceName && (
-                        <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700/60 text-[11px] font-medium text-zinc-200">
-                          {b.serviceName}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {b.serviceName && (
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700/60 text-[11px] font-medium text-zinc-200">
+                            {b.serviceName}
+                          </span>
+                        )}
+                        {b.staffMemberName && (
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-medium text-zinc-300 flex items-center gap-1">
+                            <User className="w-3 h-3 text-zinc-400" />
+                            <span>{b.staffMemberName}</span>
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-zinc-400 font-mono mt-1">
                         {formatDateSpanish(b.date)}
                       </div>
@@ -974,7 +1140,302 @@ export default function TenantDashboard() {
           </div>
         )}
 
-        {/* TAB 2: AVAILABILITY CONFIG */}
+        {/* TAB: STAFF / EQUIPO */}
+        {activeTab === "STAFF" && (
+          <div className="space-y-6">
+            {/* Create / Edit Staff Form */}
+            <div className="rounded-2xl p-5 sm:p-6 border border-zinc-800 bg-[#121215]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">
+                      {editingStaffId ? "Editar Profesional" : "Agregar Miembro al Equipo"}
+                    </h2>
+                    <p className="text-xs text-zinc-400 font-light">
+                      {editingStaffId
+                        ? "Modificá los datos del barbero o profesional."
+                        : "Agregá barberos o especialistas para que tus clientes puedan elegir con quién atenderse."}
+                    </p>
+                  </div>
+                </div>
+
+                {editingStaffId && (
+                  <button
+                    type="button"
+                    onClick={resetStaffForm}
+                    className="text-xs text-zinc-400 hover:text-white flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancelar</span>
+                  </button>
+                )}
+              </div>
+
+              <form onSubmit={handleSubmitStaff} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Nombre y Apellido *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ej. Lucas Gómez"
+                      value={staffName}
+                      onChange={(e) => setStaffName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl minimal-input text-xs text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Rol o Especialidad (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej. Barbero Senior, Colorista, Nail Artist"
+                      value={staffRole}
+                      onChange={(e) => setStaffRole(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl minimal-input text-xs text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Email del profesional (opcional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="ej. lucas@gmail.com"
+                      value={staffEmail}
+                      onChange={(e) => setStaffEmail(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl minimal-input text-xs text-white"
+                    />
+                    <p className="text-[11px] text-zinc-500 mt-1 font-light">
+                      Le enviaremos un correo de aviso automático cada vez que alguien reserve con él.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      WhatsApp / Teléfono (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej. 5491122334455"
+                      value={staffPhone}
+                      onChange={(e) => setStaffPhone(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl minimal-input text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Photo upload for Staff Member */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                    Foto del profesional (opcional)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                      {staffAvatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={staffAvatarUrl}
+                          alt="Foto"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User className="w-5 h-5 text-zinc-500" />
+                      )}
+                    </div>
+
+                    <label className="cursor-pointer px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 font-medium transition flex items-center gap-1.5">
+                      {uploadingStaffPhoto ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>{uploadingStaffPhoto ? "Subiendo..." : "Subir foto"}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadStaffPhoto(file);
+                        }}
+                      />
+                    </label>
+
+                    {staffAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setStaffAvatarUrl("")}
+                        className="text-xs text-zinc-500 hover:text-rose-400"
+                      >
+                        Quitar foto
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  {editingStaffId && (
+                    <button
+                      type="button"
+                      onClick={resetStaffForm}
+                      className="px-4 py-2 rounded-full border border-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-800 transition"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={savingStaff}
+                    className="px-5 py-2 rounded-full bg-white text-zinc-950 text-xs font-semibold hover:bg-zinc-200 transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {savingStaff ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                    <span>{editingStaffId ? "Actualizar Profesional" : "Agregar al Equipo"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Staff List */}
+            <div className="rounded-2xl p-5 sm:p-6 border border-zinc-800 bg-[#121215]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">
+                  Equipo Actual ({staffMembers.length})
+                </h3>
+                <span className="text-xs text-zinc-500 font-light">
+                  {staffMembers.length === 0
+                    ? "Modo individual (1 sola agenda)"
+                    : "Modo multi-profesional activo"}
+                </span>
+              </div>
+
+              {staffMembers.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-zinc-800 rounded-xl">
+                  <Users className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-400 font-medium">
+                    No tenés profesionales agregados en tu equipo
+                  </p>
+                  <p className="text-[11px] text-zinc-500 mt-1 max-w-md mx-auto font-light">
+                    Tu perfil funciona actualmente con tu agenda individual única. Agregá barberos o colaboradores arriba para que tus clientes puedan elegir con quién atenderse.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {staffMembers.map((staff) => (
+                    <div
+                      key={staff.id}
+                      className={`p-4 rounded-xl border transition flex flex-col justify-between ${
+                        staff.isActive
+                          ? "bg-zinc-900/40 border-zinc-800"
+                          : "bg-zinc-950/40 border-zinc-900 opacity-60"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 text-xs font-bold text-white">
+                              {staff.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={staff.avatarUrl}
+                                  alt={staff.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                staff.name.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-white">
+                                {staff.name}
+                              </div>
+                              {staff.role && (
+                                <div className="text-[11px] text-zinc-400 mt-0.5 font-light">
+                                  {staff.role}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                              staff.isActive
+                                ? "bg-emerald-950/70 text-emerald-300 border border-emerald-900/60"
+                                : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                            }`}
+                          >
+                            {staff.isActive ? "Activo" : "Pausado"}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-[11px] text-zinc-400 font-light mt-2">
+                          {staff.email && (
+                            <div className="truncate">✉️ {staff.email}</div>
+                          )}
+                          {staff.phone && (
+                            <div className="font-mono">📱 {staff.phone}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStaff(staff)}
+                          className="text-xs text-zinc-400 hover:text-white font-medium"
+                        >
+                          {staff.isActive ? "Pausar" : "Activar"}
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingStaffId(staff.id);
+                              setStaffName(staff.name);
+                              setStaffRole(staff.role || "");
+                              setStaffEmail(staff.email || "");
+                              setStaffPhone(staff.phone || "");
+                              setStaffAvatarUrl(staff.avatarUrl || "");
+                            }}
+                            title="Editar"
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStaff(staff.id)}
+                            title="Eliminar"
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: AVAILABILITY CONFIG */}
         {activeTab === "AVAILABILITY" && (
           <div className="space-y-4">
             <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">

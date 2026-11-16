@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateAvailableSlots } from "@/lib/time-slots";
+import { generateAvailableSlots, type Slot } from "@/lib/time-slots";
 
 export async function GET(
   req: Request,
@@ -11,6 +11,7 @@ export async function GET(
     const { searchParams } = new URL(req.url);
     const dateStr = searchParams.get("date"); // "YYYY-MM-DD"
     const serviceId = searchParams.get("serviceId");
+    const staffMemberId = searchParams.get("staffMemberId"); // "any" | string
 
     if (!slug || !dateStr) {
       return NextResponse.json(
@@ -24,6 +25,10 @@ export async function GET(
       include: {
         availabilities: true,
         services: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
+        staffMembers: {
           where: { isActive: true },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         },
@@ -84,20 +89,79 @@ export async function GET(
         startTime: true,
         endTime: true,
         status: true,
+        staffMemberId: true,
       },
     });
 
-    const slots = generateAvailableSlots({
-      dateStr,
-      startTime: availability.startTime,
-      endTime: availability.endTime,
-      slotDuration: effectiveDuration,
-      bufferTime: profile.bufferTime,
-      breakStartTime: availability.breakStartTime,
-      breakEndTime: availability.breakEndTime,
-      timezone: profile.timezone || "America/Argentina/Buenos_Aires",
-      existingBookings,
-    });
+    const activeStaff = profile.staffMembers;
+
+    let slots: Slot[] = [];
+    if (activeStaff.length === 0) {
+      // Solo professional (no staff members configured)
+      slots = generateAvailableSlots({
+        dateStr,
+        startTime: availability.startTime,
+        endTime: availability.endTime,
+        slotDuration: effectiveDuration,
+        bufferTime: profile.bufferTime,
+        breakStartTime: availability.breakStartTime,
+        breakEndTime: availability.breakEndTime,
+        timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+        existingBookings,
+      });
+    } else if (staffMemberId && staffMemberId !== "any") {
+      // Client chose a specific staff member
+      const chosenStaff = activeStaff.find((s) => s.id === staffMemberId);
+      const staffBookings = chosenStaff
+        ? existingBookings.filter((b) => b.staffMemberId === chosenStaff.id)
+        : existingBookings;
+
+      slots = generateAvailableSlots({
+        dateStr,
+        startTime: availability.startTime,
+        endTime: availability.endTime,
+        slotDuration: effectiveDuration,
+        bufferTime: profile.bufferTime,
+        breakStartTime: availability.breakStartTime,
+        breakEndTime: availability.breakEndTime,
+        timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+        existingBookings: staffBookings,
+      });
+    } else {
+      // Client chose "Cualquiera disponible" (or no staff selected yet)
+      // Slot is available if AT LEAST ONE active staff member is free at that time
+      const staffSlotsList = activeStaff.map((staff) => {
+        const staffBookings = existingBookings.filter(
+          (b) => b.staffMemberId === staff.id
+        );
+        return generateAvailableSlots({
+          dateStr,
+          startTime: availability.startTime,
+          endTime: availability.endTime,
+          slotDuration: effectiveDuration,
+          bufferTime: profile.bufferTime,
+          breakStartTime: availability.breakStartTime,
+          breakEndTime: availability.breakEndTime,
+          timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+          existingBookings: staffBookings,
+        });
+      });
+
+      if (staffSlotsList.length > 0) {
+        slots = staffSlotsList[0].map((baseSlot, index) => {
+          const isAnyAvailable = staffSlotsList.some(
+            (list) => list[index]?.available
+          );
+          return {
+            startTime: baseSlot.startTime,
+            endTime: baseSlot.endTime,
+            available: isAnyAvailable,
+          };
+        });
+      } else {
+        slots = [];
+      }
+    }
 
     return NextResponse.json({
       date: dateStr,

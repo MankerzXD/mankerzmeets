@@ -20,6 +20,9 @@ export async function GET() {
             services: {
               orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
             },
+            staffMembers: {
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            },
           },
         },
       },

@@ -15,6 +15,7 @@ export async function POST(
       date,
       startTime,
       serviceId,
+      staffMemberId,
       customerName,
       customerEmail,
       customerPhone,
@@ -46,6 +47,7 @@ export async function POST(
       include: {
         availabilities: true,
         services: { where: { isActive: true } },
+        staffMembers: { where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
         user: { select: { email: true } },
       },
     });
@@ -119,24 +121,96 @@ export async function POST(
           startTime: true,
           endTime: true,
           status: true,
+          staffMemberId: true,
         },
       });
 
-      const validSlots = generateAvailableSlots({
-        dateStr: date,
-        startTime: availability.startTime,
-        endTime: availability.endTime,
-        slotDuration: effectiveDuration,
-        bufferTime: profile.bufferTime,
-        breakStartTime: availability.breakStartTime,
-        breakEndTime: availability.breakEndTime,
-        timezone: profile.timezone || "America/Argentina/Buenos_Aires",
-        existingBookings,
-      });
+      const activeStaff = profile.staffMembers;
+      let assignedStaff: { id: string; name: string; email: string | null } | null = null;
 
-      const chosen = validSlots.find((s) => s.startTime === startTime);
-      if (!chosen || !chosen.available) {
-        return { conflict: true as const };
+      if (activeStaff.length === 0) {
+        // Solo professional (no staff configured)
+        const validSlots = generateAvailableSlots({
+          dateStr: date,
+          startTime: availability.startTime,
+          endTime: availability.endTime,
+          slotDuration: effectiveDuration,
+          bufferTime: profile.bufferTime,
+          breakStartTime: availability.breakStartTime,
+          breakEndTime: availability.breakEndTime,
+          timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+          existingBookings,
+        });
+
+        const chosen = validSlots.find((s) => s.startTime === startTime);
+        if (!chosen || !chosen.available) {
+          return { conflict: true as const };
+        }
+      } else if (staffMemberId && staffMemberId !== "any") {
+        // Client chose a specific staff member
+        const chosenStaff = activeStaff.find((s) => s.id === staffMemberId);
+        if (!chosenStaff) {
+          return { conflict: true as const };
+        }
+
+        const staffBookings = existingBookings.filter(
+          (b) => b.staffMemberId === chosenStaff.id
+        );
+        const validSlots = generateAvailableSlots({
+          dateStr: date,
+          startTime: availability.startTime,
+          endTime: availability.endTime,
+          slotDuration: effectiveDuration,
+          bufferTime: profile.bufferTime,
+          breakStartTime: availability.breakStartTime,
+          breakEndTime: availability.breakEndTime,
+          timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+          existingBookings: staffBookings,
+        });
+
+        const chosen = validSlots.find((s) => s.startTime === startTime);
+        if (!chosen || !chosen.available) {
+          return { conflict: true as const };
+        }
+
+        assignedStaff = chosenStaff;
+      } else {
+        // Client chose "Cualquiera disponible" -> find an active staff member who is free
+        const candidateStaff = activeStaff.filter((staff) => {
+          const staffBookings = existingBookings.filter(
+            (b) => b.staffMemberId === staff.id
+          );
+          const validSlots = generateAvailableSlots({
+            dateStr: date,
+            startTime: availability.startTime,
+            endTime: availability.endTime,
+            slotDuration: effectiveDuration,
+            bufferTime: profile.bufferTime,
+            breakStartTime: availability.breakStartTime,
+            breakEndTime: availability.breakEndTime,
+            timezone: profile.timezone || "America/Argentina/Buenos_Aires",
+            existingBookings: staffBookings,
+          });
+          const slot = validSlots.find((s) => s.startTime === startTime);
+          return slot && slot.available;
+        });
+
+        if (candidateStaff.length === 0) {
+          return { conflict: true as const };
+        }
+
+        // Pick candidate with fewest bookings today for balanced load distribution
+        candidateStaff.sort((a, b) => {
+          const countA = existingBookings.filter(
+            (x) => x.staffMemberId === a.id
+          ).length;
+          const countB = existingBookings.filter(
+            (x) => x.staffMemberId === b.id
+          ).length;
+          return countA - countB;
+        });
+
+        assignedStaff = candidateStaff[0];
       }
 
       const booking = await tx.booking.create({
@@ -144,6 +218,8 @@ export async function POST(
           profileId: profile.id,
           serviceId: selectedService ? selectedService.id : null,
           serviceName: selectedService ? selectedService.name : null,
+          staffMemberId: assignedStaff ? assignedStaff.id : null,
+          staffMemberName: assignedStaff ? assignedStaff.name : null,
           customerName: customerName.trim(),
           customerEmail: customerEmail.trim(),
           customerPhone: customerPhone.trim(),
@@ -155,14 +231,14 @@ export async function POST(
         },
       });
 
-      return { conflict: false as const, booking };
+      return { conflict: false as const, booking, assignedStaff };
     });
 
     if (result.conflict) {
       return NextResponse.json(
         {
           error:
-            "Este horario ya no está disponible para la duración seleccionada. Por favor elegí otro horario.",
+            "Este horario ya no está disponible. Por favor elegí otro horario u otro profesional.",
         },
         { status: 409 }
       );
@@ -173,8 +249,11 @@ export async function POST(
     const serviceLine = selectedService
       ? `\n✨ *Turno:* ${selectedService.name} (${selectedService.duration} min)`
       : "";
+    const staffLine = result.assignedStaff
+      ? `\n💈 *Profesional:* ${result.assignedStaff.name}`
+      : "";
     const waText = encodeURIComponent(
-      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
+      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}${staffLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
     );
 
     const whatsappUrl =
@@ -187,6 +266,8 @@ export async function POST(
       profileName: profile.name,
       profileSlug: profile.slug,
       serviceName: selectedService ? selectedService.name : null,
+      staffMemberName: result.assignedStaff ? result.assignedStaff.name : null,
+      staffMemberEmail: result.assignedStaff?.email || null,
       formattedDate,
       date,
       startTime,

@@ -52,6 +52,16 @@ export async function GET(
           },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         },
+        staffMembers: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            avatarUrl: true,
+          },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
       },
     });
 

@@ -87,6 +87,8 @@ export async function sendBookingNotificationEmails({
   profileName,
   profileSlug,
   serviceName,
+  staffMemberName,
+  staffMemberEmail,
   formattedDate,
   date,
   startTime,
@@ -101,6 +103,8 @@ export async function sendBookingNotificationEmails({
   profileName: string;
   profileSlug: string;
   serviceName?: string | null;
+  staffMemberName?: string | null;
+  staffMemberEmail?: string | null;
   formattedDate: string;
   date: string;
   startTime: string;
@@ -110,7 +114,7 @@ export async function sendBookingNotificationEmails({
   customerPhone: string;
   notes?: string | null;
   whatsappUrl: string | null;
-}): Promise<{ ownerSent: boolean; customerSent: boolean }> {
+}): Promise<{ ownerSent: boolean; customerSent: boolean; staffSent?: boolean }> {
   const { resend, from, appUrl } = getResendConfig();
 
   const cleanCustomerPhone = customerPhone.replace(/[^\d]/g, "");
@@ -152,6 +156,7 @@ export async function sendBookingNotificationEmails({
     ["Cliente", customerName],
   ];
   if (serviceName) ownerRows.push(["Tipo de turno", serviceName]);
+  if (staffMemberName) ownerRows.push(["Atendido por", staffMemberName]);
   ownerRows.push(
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`],
@@ -179,9 +184,10 @@ export async function sendBookingNotificationEmails({
 
   // 2. Email to End Customer
   const customerRows: Array<[string, string]> = [
-    ["Profesional", profileName],
+    ["Profesional / Local", profileName],
   ];
   if (serviceName) customerRows.push(["Servicio", serviceName]);
+  if (staffMemberName) customerRows.push(["Atendido por", staffMemberName]);
   customerRows.push(
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`]
@@ -205,7 +211,7 @@ export async function sendBookingNotificationEmails({
     footerText: `Mankerz Meet • ${appUrl}/${profileSlug}`,
   });
 
-  const tasks: Array<Promise<{ role: "owner" | "customer"; ok: boolean }>> = [
+  const tasks: Array<Promise<{ role: "owner" | "customer" | "staff"; ok: boolean }>> = [
     resend.emails
       .send({
         from,
@@ -251,10 +257,39 @@ export async function sendBookingNotificationEmails({
     );
   }
 
+  if (
+    staffMemberEmail &&
+    staffMemberEmail.includes("@") &&
+    staffMemberEmail.toLowerCase().trim() !== ownerEmail.toLowerCase().trim()
+  ) {
+    tasks.push(
+      resend.emails
+        .send({
+          from,
+          to: [staffMemberEmail],
+          subject: `Nuevo turno asignado a vos: ${customerName} — ${formattedDate} (${startTime} hs)`,
+          html: ownerHtml,
+          text: `Nuevo turno asignado en ${profileName}: ${customerName} (${customerPhone}) el ${formattedDate} de ${startTime} a ${endTime} hs.`,
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error("Resend staff booking email error:", error);
+            return { role: "staff" as const, ok: false };
+          }
+          return { role: "staff" as const, ok: true };
+        })
+        .catch((err) => {
+          console.error("Resend staff booking email exception:", err);
+          return { role: "staff" as const, ok: false };
+        })
+    );
+  }
+
   const results = await Promise.all(tasks);
   return {
     ownerSent: results.find((r) => r.role === "owner")?.ok ?? false,
     customerSent: results.find((r) => r.role === "customer")?.ok ?? false,
+    staffSent: results.find((r) => r.role === "staff")?.ok ?? undefined,
   };
 }
 

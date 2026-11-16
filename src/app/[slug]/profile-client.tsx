@@ -14,6 +14,7 @@ import {
   Share2,
   Check,
   User,
+  Users,
   ArrowRight,
   CalendarCheck,
   MessageCircle,
@@ -36,6 +37,13 @@ interface PublicService {
   price: number | null;
 }
 
+interface PublicStaffMember {
+  id: string;
+  name: string;
+  role: string | null;
+  avatarUrl: string | null;
+}
+
 interface PublicProfile {
   id: string;
   slug: string;
@@ -52,6 +60,7 @@ interface PublicProfile {
   slotDuration: number;
   availabilities: PublicAvailability[];
   services?: PublicService[];
+  staffMembers?: PublicStaffMember[];
 }
 
 interface TimeSlot {
@@ -81,6 +90,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedStaffMemberId, setSelectedStaffMemberId] = useState<string>("any");
 
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -98,6 +108,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
       startTime: string;
       endTime: string;
       serviceName?: string | null;
+      staffMemberName?: string | null;
     };
     whatsappUrl: string | null;
   } | null>(null);
@@ -144,8 +155,12 @@ export default function ProfileClient({ slug }: { slug: string }) {
         const serviceQuery = selectedServiceId
           ? `&serviceId=${encodeURIComponent(selectedServiceId)}`
           : "";
+        const staffQuery =
+          selectedStaffMemberId && selectedStaffMemberId !== "any"
+            ? `&staffMemberId=${encodeURIComponent(selectedStaffMemberId)}`
+            : "";
         const res = await fetch(
-          `/api/public/${slug}/slots?date=${selectedDateStr}${serviceQuery}`
+          `/api/public/${slug}/slots?date=${selectedDateStr}${serviceQuery}${staffQuery}`
         );
         const data = await res.json();
         if (res.ok) {
@@ -162,7 +177,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
     }
 
     fetchSlots();
-  }, [slug, selectedDateStr, selectedServiceId]);
+  }, [slug, selectedDateStr, selectedServiceId, selectedStaffMemberId]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -262,6 +277,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
           date: selectedDateStr,
           startTime: selectedSlot.startTime,
           serviceId: selectedServiceId,
+          staffMemberId: selectedStaffMemberId,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           customerEmail: customerEmail.trim(),
@@ -415,6 +431,9 @@ export default function ProfileClient({ slug }: { slug: string }) {
   const effectiveDuration = selectedService
     ? selectedService.duration
     : profile.slotDuration;
+  const activeStaffMembers = profile.staffMembers || [];
+  const selectedStaff =
+    activeStaffMembers.find((s) => s.id === selectedStaffMemberId) || null;
 
   return (
     <div className={`min-h-screen flex flex-col items-center pb-14 ${theme.pageBg}`}>
@@ -525,6 +544,14 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     <span className={theme.mutedText}>Tipo de turno:</span>
                     <span className={`font-medium ${theme.titleText}`}>
                       {bookingResult.booking.serviceName}
+                    </span>
+                  </div>
+                )}
+                {bookingResult.booking.staffMemberName && (
+                  <div className="flex justify-between">
+                    <span className={theme.mutedText}>Atendido por:</span>
+                    <span className={`font-medium ${theme.titleText}`}>
+                      {bookingResult.booking.staffMemberName}
                     </span>
                   </div>
                 )}
@@ -680,6 +707,97 @@ export default function ProfileClient({ slug }: { slug: string }) {
                 </div>
               )}
 
+              {/* STAFF / PROFESSIONAL SELECTOR (If profile has active staff members) */}
+              {activeStaffMembers.length > 0 && (
+                <div className={`rounded-2xl p-4 border mb-4 ${theme.cardBg}`}>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>
+                      ¿Con quién te gustaría atenderte?
+                    </span>
+                    <span className={`text-[11px] font-mono ${theme.mutedText}`}>
+                      {activeStaffMembers.length} {activeStaffMembers.length === 1 ? "profesional" : "profesionales"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Option: Cualquiera disponible */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStaffMemberId("any");
+                        setSelectedSlot(null);
+                      }}
+                      className={`text-left p-2.5 rounded-xl border transition cursor-pointer flex items-center gap-2.5 ${
+                        selectedStaffMemberId === "any" ? theme.slotSelected : theme.slotOpen
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                          selectedStaffMemberId === "any"
+                            ? "bg-zinc-950 text-white"
+                            : "bg-zinc-800 text-zinc-300"
+                        }`}
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold truncate">Cualquiera disponible</div>
+                        <div
+                          className={`text-[10px] truncate ${
+                            selectedStaffMemberId === "any" ? "opacity-75" : theme.mutedText
+                          }`}
+                        >
+                          Asignación automática
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Option: Specific Staff Members */}
+                    {activeStaffMembers.map((staff) => {
+                      const isChosen = selectedStaffMemberId === staff.id;
+                      return (
+                        <button
+                          key={staff.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStaffMemberId(staff.id);
+                            setSelectedSlot(null);
+                          }}
+                          className={`text-left p-2.5 rounded-xl border transition cursor-pointer flex items-center gap-2.5 ${
+                            isChosen ? theme.slotSelected : theme.slotOpen
+                          }`}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700/60 flex items-center justify-center overflow-hidden shrink-0 text-xs font-bold text-white">
+                            {staff.avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={staff.avatarUrl}
+                                alt={staff.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              staff.name.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold truncate">{staff.name}</div>
+                            {staff.role && (
+                              <div
+                                className={`text-[10px] truncate ${
+                                  isChosen ? "opacity-75" : theme.mutedText
+                                }`}
+                              >
+                                {staff.role}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* FULL MONTH CALENDAR VIEW */}
               <div className={`rounded-2xl p-5 border ${theme.cardBg}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -819,6 +937,11 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     <div className="text-xs">
                       <span className={`block text-[11px] ${theme.mutedText}`}>
                         {selectedService ? selectedService.name : "Horario elegido:"}
+                        {selectedStaff
+                          ? ` • Con ${selectedStaff.name}`
+                          : activeStaffMembers.length > 0
+                          ? " • Con cualquiera disponible"
+                          : ""}
                       </span>
                       <span className={`font-semibold ${theme.titleText}`}>
                         {selectedSlot.startTime} a {selectedSlot.endTime} hs

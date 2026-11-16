@@ -57,7 +57,27 @@ model Profile {
 
   availabilities Availability[]
   services       Service[]
+  staffMembers   StaffMember[]
   bookings       Booking[]
+}
+
+model StaffMember {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String   // e.g. "Lucas", "Mateo"
+  role        String?  // e.g. "Barbero Principal", "Colorista", "Nail Artist"
+  avatarUrl   String?  // Optional staff avatar photo
+  email       String?  // Optional email to receive booking notifications
+  phone       String?  // Optional phone / WhatsApp
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings    Booking[]
+
+  @@index([profileId, isActive])
 }
 
 model Service {
@@ -95,22 +115,26 @@ model Availability {
 }
 
 model Booking {
-  id            String   @id @default(cuid())
-  profileId     String
-  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  serviceId     String?
-  service       Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  serviceName   String?  // Snapshot of selected service name
-  customerName  String
-  customerEmail String
-  customerPhone String
-  date          String   // "YYYY-MM-DD"
-  startTime     String   // "10:00"
-  endTime       String   // "10:30"
-  notes         String?
-  status        String   @default("CONFIRMED") // "CONFIRMED" | "CANCELLED" | "COMPLETED"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String       @id @default(cuid())
+  profileId       String
+  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  serviceId       String?
+  service         Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceName     String?      // Snapshot of selected service name
+  staffMemberId   String?
+  staffMember     StaffMember? @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  staffMemberName String?      // Snapshot of staff member name (e.g. "Lucas")
+  customerName    String
+  customerEmail   String
+  customerPhone   String
+  date            String       // "YYYY-MM-DD"
+  startTime       String       // "10:00"
+  endTime         String       // "10:30"
+  notes           String?
+  status          String       @default("CONFIRMED") // "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([profileId, date])
+  @@index([profileId, staffMemberId, date])
 }
