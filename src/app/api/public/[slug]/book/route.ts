@@ -14,6 +14,7 @@ export async function POST(
     const {
       date,
       startTime,
+      serviceId,
       customerName,
       customerEmail,
       customerPhone,
@@ -44,6 +45,7 @@ export async function POST(
       where: { slug: cleanSlug },
       include: {
         availabilities: true,
+        services: { where: { isActive: true } },
         user: { select: { email: true } },
       },
     });
@@ -59,7 +61,29 @@ export async function POST(
       );
     }
 
-    // Validate day of week and verify requested slot is actually valid & open
+    // Resolve service & duration
+    let selectedService: { id: string; name: string; duration: number } | null = null;
+    if (profile.services.length > 0) {
+      if (!serviceId) {
+        return NextResponse.json(
+          { error: "Por favor elegí el tipo de turno o servicio antes de reservar." },
+          { status: 400 }
+        );
+      }
+      const matched = profile.services.find((s) => s.id === serviceId);
+      if (!matched) {
+        return NextResponse.json(
+          { error: "El servicio seleccionado ya no está disponible." },
+          { status: 400 }
+        );
+      }
+      selectedService = matched;
+    }
+
+    const effectiveDuration = selectedService
+      ? selectedService.duration
+      : profile.slotDuration;
+
     const [year, month, day] = date.split("-").map(Number);
     const targetDate = new Date(year, month - 1, day);
     const dayOfWeek = targetDate.getDay();
@@ -76,7 +100,7 @@ export async function POST(
 
     const [startH, startM] = startTime.split(":").map(Number);
     const startTotalMin = startH * 60 + startM;
-    const endTotalMin = startTotalMin + profile.slotDuration;
+    const endTotalMin = startTotalMin + effectiveDuration;
     const endH = Math.floor(endTotalMin / 60)
       .toString()
       .padStart(2, "0");
@@ -102,7 +126,7 @@ export async function POST(
         dateStr: date,
         startTime: availability.startTime,
         endTime: availability.endTime,
-        slotDuration: profile.slotDuration,
+        slotDuration: effectiveDuration,
         bufferTime: profile.bufferTime,
         breakStartTime: availability.breakStartTime,
         breakEndTime: availability.breakEndTime,
@@ -118,8 +142,10 @@ export async function POST(
       const booking = await tx.booking.create({
         data: {
           profileId: profile.id,
+          serviceId: selectedService ? selectedService.id : null,
+          serviceName: selectedService ? selectedService.name : null,
           customerName: customerName.trim(),
-          customerEmail: (customerEmail || "").trim(),
+          customerEmail: customerEmail.trim(),
           customerPhone: customerPhone.trim(),
           date,
           startTime,
@@ -136,7 +162,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "Este horario ya no está disponible. Por favor elegí otro horario.",
+            "Este horario ya no está disponible para la duración seleccionada. Por favor elegí otro horario.",
         },
         { status: 409 }
       );
@@ -144,8 +170,11 @@ export async function POST(
 
     const formattedDate = formatDateSpanish(date);
     const professionalPhone = profile.whatsapp.replace(/[^\d]/g, "");
+    const serviceLine = selectedService
+      ? `\n✨ *Turno:* ${selectedService.name} (${selectedService.duration} min)`
+      : "";
     const waText = encodeURIComponent(
-      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:\n\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
+      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
     );
 
     const whatsappUrl =
@@ -153,11 +182,11 @@ export async function POST(
         ? `https://wa.me/${professionalPhone}?text=${waText}`
         : null;
 
-    // Notify both the profile owner and the end customer via Resend
     const emailStatus = await sendBookingNotificationEmails({
       ownerEmail: profile.user.email,
       profileName: profile.name,
       profileSlug: profile.slug,
+      serviceName: selectedService ? selectedService.name : null,
       formattedDate,
       date,
       startTime,

@@ -81,11 +81,18 @@ export function generateAvailableSlots({
   existingBookings?: Array<{ startTime: string; endTime: string; status: string }>;
 }): Slot[] {
   const slots: Slot[] = [];
+  const duration = Math.max(5, Number(slotDuration) || 30);
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
 
-  const breakStartMin = breakStartTime ? timeToMinutes(breakStartTime) : null;
-  const breakEndMin = breakEndTime ? timeToMinutes(breakEndTime) : null;
+  const breakStartMin =
+    breakStartTime && breakStartTime.includes(":")
+      ? timeToMinutes(breakStartTime)
+      : null;
+  const breakEndMin =
+    breakEndTime && breakEndTime.includes(":")
+      ? timeToMinutes(breakEndTime)
+      : null;
 
   const bookedRanges = existingBookings
     .filter((b) => b.status !== "CANCELLED")
@@ -96,36 +103,48 @@ export function generateAvailableSlots({
 
   const { todayStr, currentMinutes } = getNowInTimezone(timezone);
   const isToday = dateStr === todayStr;
+  const isPastDay = dateStr < todayStr;
 
   let currentMin = startMin;
-  const step = slotDuration + bufferTime;
+  const step = duration + bufferTime;
 
-  while (currentMin + slotDuration <= endMin) {
+  while (currentMin + duration <= endMin) {
     const slotStart = currentMin;
-    const slotEnd = currentMin + slotDuration;
+    const slotEnd = currentMin + duration;
 
-    let isBreak = false;
+    // 1. Break check: snap right after break ends
     if (breakStartMin !== null && breakEndMin !== null) {
       if (slotStart < breakEndMin && slotEnd > breakStartMin) {
-        isBreak = true;
+        currentMin = Math.max(currentMin + 1, breakEndMin);
+        continue;
       }
     }
 
-    const isBooked = bookedRanges.some(
+    // 2. Overlap check with existing bookings
+    const overlapping = bookedRanges.filter(
       (b) => slotStart < b.end && slotEnd > b.start
     );
 
-    const isPast = isToday && slotStart <= currentMinutes + 15;
-    const isPastDay = dateStr < todayStr;
-    const isAvailable = !isBreak && !isBooked && !isPast && !isPastDay;
-
-    if (!isBreak) {
+    if (overlapping.length > 0) {
+      const latestConflictEnd = Math.max(
+        ...overlapping.map((b) => b.end + bufferTime)
+      );
       slots.push({
         startTime: minutesToTime(slotStart),
         endTime: minutesToTime(slotEnd),
-        available: isAvailable,
+        available: false,
       });
+      currentMin = Math.max(currentMin + 1, latestConflictEnd);
+      continue;
     }
+
+    // 3. Available slot (unless already passed today)
+    const isPast = isToday && slotStart <= currentMinutes + 15;
+    slots.push({
+      startTime: minutesToTime(slotStart),
+      endTime: minutesToTime(slotEnd),
+      available: !isPast && !isPastDay,
+    });
 
     currentMin += step;
   }

@@ -17,6 +17,9 @@ export async function GET() {
             availabilities: {
               orderBy: { dayOfWeek: "asc" },
             },
+            services: {
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            },
           },
         },
       },

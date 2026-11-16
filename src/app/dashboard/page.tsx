@@ -21,6 +21,9 @@ import {
   Download,
   Upload,
   X,
+  Plus,
+  Pencil,
+  Clock,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 
@@ -31,6 +34,15 @@ interface DaySchedule {
   isActive: boolean;
   breakStartTime: string | null;
   breakEndTime: string | null;
+}
+
+interface ServiceItem {
+  id: string;
+  name: string;
+  description: string | null;
+  duration: number;
+  price: number | null;
+  isActive: boolean;
 }
 
 interface ProfileData {
@@ -48,10 +60,12 @@ interface ProfileData {
   status: string;
   slotDuration: number;
   availabilities: DaySchedule[];
+  services?: ServiceItem[];
 }
 
 interface BookingItem {
   id: string;
+  serviceName: string | null;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
@@ -84,7 +98,16 @@ export default function TenantDashboard() {
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string; role: string } | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "AVAILABILITY" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "AVAILABILITY" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+
+  // Service form states
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDescription, setServiceDescription] = useState("");
+  const [serviceDuration, setServiceDuration] = useState(30);
+  const [servicePrice, setServicePrice] = useState("");
+  const [savingService, setSavingService] = useState(false);
 
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -131,6 +154,7 @@ export default function TenantDashboard() {
           setInstagram(p.instagram || "");
           setTimezone(p.timezone || "America/Argentina/Buenos_Aires");
           setSlotDuration(p.slotDuration || 30);
+          setServices(p.services || []);
 
           const fullWeek: DaySchedule[] = [];
           for (let day = 0; day <= 6; day++) {
@@ -295,6 +319,92 @@ export default function TenantDashboard() {
       showNotification("success", `Turno actualizado a "${newStatus}"`);
     } catch {
       showNotification("error", "No se pudo actualizar el turno");
+    }
+  };
+
+  const resetServiceForm = () => {
+    setEditingServiceId(null);
+    setServiceName("");
+    setServiceDescription("");
+    setServiceDuration(30);
+    setServicePrice("");
+  };
+
+  const handleSubmitService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingService(true);
+    try {
+      const isEdit = Boolean(editingServiceId);
+      const res = await fetch("/api/dashboard/services", {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(isEdit ? { id: editingServiceId } : {}),
+          name: serviceName,
+          description: serviceDescription,
+          duration: Number(serviceDuration),
+          price: servicePrice.trim() ? Number(servicePrice) : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar el tipo de turno");
+
+      if (isEdit) {
+        setServices((prev) =>
+          prev.map((s) => (s.id === data.service.id ? data.service : s))
+        );
+        showNotification("success", "Tipo de turno actualizado");
+      } else {
+        setServices((prev) => [...prev, data.service]);
+        showNotification("success", "Tipo de turno agregado");
+      }
+      resetServiceForm();
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "No se pudo guardar el servicio"
+      );
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handleToggleService = async (srv: ServiceItem) => {
+    try {
+      const res = await fetch("/api/dashboard/services", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: srv.id, isActive: !srv.isActive }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al actualizar estado");
+      setServices((prev) =>
+        prev.map((s) => (s.id === srv.id ? data.service : s))
+      );
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al cambiar estado"
+      );
+    }
+  };
+
+  const handleDeleteService = async (id: string) => {
+    try {
+      const res = await fetch(`/api/dashboard/services?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al eliminar");
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      if (editingServiceId === id) resetServiceForm();
+      showNotification("success", "Tipo de turno eliminado");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al eliminar"
+      );
     }
   };
 
@@ -488,6 +598,17 @@ export default function TenantDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab("SERVICES")}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
+              activeTab === "SERVICES"
+                ? "bg-white text-zinc-950 font-semibold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            Tipos de Turno ({services.length})
+          </button>
+
+          <button
             onClick={() => setActiveTab("AVAILABILITY")}
             className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
               activeTab === "AVAILABILITY"
@@ -586,7 +707,12 @@ export default function TenantDashboard() {
                       </div>
 
                       <div className="text-sm font-semibold text-white">{b.customerName}</div>
-                      <div className="text-xs text-zinc-400 font-mono mt-0.5">
+                      {b.serviceName && (
+                        <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-700/60 text-[11px] font-medium text-zinc-200">
+                          {b.serviceName}
+                        </div>
+                      )}
+                      <div className="text-xs text-zinc-400 font-mono mt-1">
                         {formatDateSpanish(b.date)}
                       </div>
 
@@ -637,6 +763,214 @@ export default function TenantDashboard() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 1B: SERVICES / APPOINTMENT TYPES */}
+        {activeTab === "SERVICES" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* Add / Edit Form */}
+            <form
+              onSubmit={handleSubmitService}
+              className="lg:col-span-5 rounded-2xl p-5 border border-zinc-800 bg-[#121215] space-y-4 h-fit"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">
+                    {editingServiceId ? "Editar tipo de turno" : "Nuevo tipo de turno"}
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                    Ej: Uñas común (30 min), Uñas con diseño (60 min), Pestañas (90 min).
+                  </p>
+                </div>
+                {editingServiceId && (
+                  <button
+                    type="button"
+                    onClick={resetServiceForm}
+                    className="text-xs text-zinc-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-300 mb-1">Nombre del servicio *</label>
+                <input
+                  type="text"
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  placeholder="Ej: Uñas con diseño"
+                  required
+                  className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-300 mb-1.5">
+                  Duración del turno (minutos) *
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 mb-2">
+                  {[15, 30, 45, 60, 90, 120].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setServiceDuration(mins)}
+                      className={`py-1.5 rounded-lg text-xs font-mono border transition cursor-pointer ${
+                        Number(serviceDuration) === mins
+                          ? "bg-white text-zinc-950 border-white font-semibold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                      }`}
+                    >
+                      {mins >= 60 && mins % 60 === 0
+                        ? `${mins / 60} h`
+                        : `${mins} min`}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                  <input
+                    type="number"
+                    min={5}
+                    max={480}
+                    step={5}
+                    value={serviceDuration}
+                    onChange={(e) => setServiceDuration(Number(e.target.value))}
+                    required
+                    className="w-24 px-2.5 py-1.5 rounded-xl minimal-input text-xs text-white font-mono"
+                  />
+                  <span className="text-xs text-zinc-400">minutos exactos</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-300 mb-1">Precio (opcional)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={servicePrice}
+                  onChange={(e) => setServicePrice(e.target.value)}
+                  placeholder="Ej: 15000 (dejar vacío si no querés mostrar)"
+                  className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-300 mb-1">Descripción corta (opcional)</label>
+                <textarea
+                  rows={2}
+                  value={serviceDescription}
+                  onChange={(e) => setServiceDescription(e.target.value)}
+                  placeholder="Detalle breve del servicio..."
+                  className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingService}
+                className="w-full py-2.5 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {savingService ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : editingServiceId ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
+                <span>{editingServiceId ? "Guardar cambios" : "Agregar tipo de turno"}</span>
+              </button>
+            </form>
+
+            {/* List of Services */}
+            <div className="lg:col-span-7 rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold text-white">Tus tipos de turno configurados</h2>
+                <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                  Tu calendario público calculará los huecos libres automáticamente según cuánto dure el servicio que elija cada cliente.
+                </p>
+              </div>
+
+              {services.length === 0 ? (
+                <div className="p-8 rounded-xl border border-zinc-800/80 bg-zinc-900/20 text-center">
+                  <Clock className="w-7 h-7 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-300 font-medium">
+                    Todavía no creaste tipos de turno específicos
+                  </p>
+                  <p className="text-[11px] text-zinc-500 mt-1 max-w-sm mx-auto font-light">
+                    Mientras no agregues servicios aquí, los clientes reservarán con tu duración por defecto ({slotDuration} min).
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {services.map((srv) => (
+                    <div
+                      key={srv.id}
+                      className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                        srv.isActive
+                          ? "bg-zinc-900/40 border-zinc-800"
+                          : "bg-zinc-950 border-zinc-900 opacity-55"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-white">{srv.name}</span>
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-200">
+                            {srv.duration} min
+                          </span>
+                          {srv.price !== null && (
+                            <span className="text-[11px] font-mono text-zinc-300">
+                              ${srv.price.toLocaleString("es-AR")}
+                            </span>
+                          )}
+                          {!srv.isActive && (
+                            <span className="text-[10px] font-mono text-zinc-500 uppercase">
+                              Pausado
+                            </span>
+                          )}
+                        </div>
+                        {srv.description && (
+                          <p className="text-[11px] text-zinc-400 font-light">{srv.description}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleService(srv)}
+                          className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-[11px] text-zinc-300 transition"
+                        >
+                          {srv.isActive ? "Pausar" : "Activar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingServiceId(srv.id);
+                            setServiceName(srv.name);
+                            setServiceDescription(srv.description || "");
+                            setServiceDuration(srv.duration);
+                            setServicePrice(srv.price !== null ? String(srv.price) : "");
+                          }}
+                          title="Editar"
+                          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteService(srv.id)}
+                          title="Eliminar"
+                          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

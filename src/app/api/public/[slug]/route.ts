@@ -41,6 +41,17 @@ export async function GET(
           },
           orderBy: { dayOfWeek: "asc" },
         },
+        services: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            duration: true,
+            price: true,
+          },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
       },
     });
 

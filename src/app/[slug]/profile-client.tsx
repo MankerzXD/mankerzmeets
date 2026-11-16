@@ -28,6 +28,14 @@ interface PublicAvailability {
   isActive: boolean;
 }
 
+interface PublicService {
+  id: string;
+  name: string;
+  description: string | null;
+  duration: number;
+  price: number | null;
+}
+
 interface PublicProfile {
   id: string;
   slug: string;
@@ -43,6 +51,7 @@ interface PublicProfile {
   status: string;
   slotDuration: number;
   availabilities: PublicAvailability[];
+  services?: PublicService[];
 }
 
 interface TimeSlot {
@@ -71,6 +80,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -82,7 +92,13 @@ export default function ProfileClient({ slug }: { slug: string }) {
   const [notes, setNotes] = useState("");
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingResult, setBookingResult] = useState<{
-    booking: { id: string; date: string; startTime: string; endTime: string };
+    booking: {
+      id: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      serviceName?: string | null;
+    };
     whatsappUrl: string | null;
   } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
@@ -103,6 +119,9 @@ export default function ProfileClient({ slug }: { slug: string }) {
         }
 
         setProfile(data.profile);
+        if (data.profile?.services?.length > 0) {
+          setSelectedServiceId(data.profile.services[0].id);
+        }
       } catch (err: unknown) {
         setProfileError(
           err instanceof Error ? err.message : "Error al cargar perfil"
@@ -122,8 +141,11 @@ export default function ProfileClient({ slug }: { slug: string }) {
       try {
         setLoadingSlots(true);
         setSelectedSlot(null);
+        const serviceQuery = selectedServiceId
+          ? `&serviceId=${encodeURIComponent(selectedServiceId)}`
+          : "";
         const res = await fetch(
-          `/api/public/${slug}/slots?date=${selectedDateStr}`
+          `/api/public/${slug}/slots?date=${selectedDateStr}${serviceQuery}`
         );
         const data = await res.json();
         if (res.ok) {
@@ -140,7 +162,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
     }
 
     fetchSlots();
-  }, [slug, selectedDateStr]);
+  }, [slug, selectedDateStr, selectedServiceId]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -239,6 +261,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
         body: JSON.stringify({
           date: selectedDateStr,
           startTime: selectedSlot.startTime,
+          serviceId: selectedServiceId,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           customerEmail: customerEmail.trim(),
@@ -384,6 +407,14 @@ export default function ProfileClient({ slug }: { slug: string }) {
       };
 
   const hasWhatsapp = profile.whatsapp && profile.whatsapp.replace(/[^\d]/g, "").length >= 8;
+  const activeServices = profile.services || [];
+  const selectedService =
+    activeServices.find((s) => s.id === selectedServiceId) ||
+    activeServices[0] ||
+    null;
+  const effectiveDuration = selectedService
+    ? selectedService.duration
+    : profile.slotDuration;
 
   return (
     <div className={`min-h-screen flex flex-col items-center pb-14 ${theme.pageBg}`}>
@@ -489,6 +520,14 @@ export default function ProfileClient({ slug }: { slug: string }) {
                   <span className={theme.mutedText}>Profesional:</span>
                   <span className={`font-medium ${theme.titleText}`}>{profile.name}</span>
                 </div>
+                {bookingResult.booking.serviceName && (
+                  <div className="flex justify-between">
+                    <span className={theme.mutedText}>Tipo de turno:</span>
+                    <span className={`font-medium ${theme.titleText}`}>
+                      {bookingResult.booking.serviceName}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className={theme.mutedText}>Fecha:</span>
                   <span className={`font-medium capitalize ${theme.titleText}`}>
@@ -519,7 +558,9 @@ export default function ProfileClient({ slug }: { slug: string }) {
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <a
                     href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-                      `Turno con ${profile.name}`
+                      bookingResult.booking.serviceName
+                        ? `${bookingResult.booking.serviceName} — ${profile.name}`
+                        : `Turno con ${profile.name}`
                     )}&dates=${bookingResult.booking.date.replace(/-/g, "")}T${bookingResult.booking.startTime.replace(
                       /:/g,
                       ""
@@ -542,12 +583,15 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     onClick={() => {
                       const startClean = `${bookingResult.booking.date.replace(/-/g, "")}T${bookingResult.booking.startTime.replace(/:/g, "")}00`;
                       const endClean = `${bookingResult.booking.date.replace(/-/g, "")}T${bookingResult.booking.endTime.replace(/:/g, "")}00`;
+                      const eventTitle = bookingResult.booking.serviceName
+                        ? `${bookingResult.booking.serviceName} — ${profile.name}`
+                        : `Turno con ${profile.name}`;
                       const icsContent = [
                         "BEGIN:VCALENDAR",
                         "VERSION:2.0",
                         "PRODID:-//Mankerz Meet//meet.mankerz.xyz//ES",
                         "BEGIN:VEVENT",
-                        `SUMMARY:Turno con ${profile.name}`,
+                        `SUMMARY:${eventTitle}`,
                         `DESCRIPTION:Turno agendado en meet.mankerz.xyz/${profile.slug}`,
                         `DTSTART:${startClean}`,
                         `DTEND:${endClean}`,
@@ -587,6 +631,55 @@ export default function ProfileClient({ slug }: { slug: string }) {
             </div>
           ) : (
             <>
+              {/* SERVICE / APPOINTMENT TYPE SELECTOR */}
+              {activeServices.length > 0 && (
+                <div className={`rounded-2xl p-4 border mb-3 ${theme.cardBg}`}>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className={`font-semibold text-xs ${theme.titleText}`}>
+                      Elegí el tipo de turno
+                    </span>
+                    <span className={`text-[11px] font-mono ${theme.mutedText}`}>
+                      {activeServices.length} {activeServices.length === 1 ? "opción" : "opciones"}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {activeServices.map((srv) => {
+                      const isChosen = selectedService?.id === srv.id;
+                      return (
+                        <button
+                          key={srv.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedServiceId(srv.id);
+                            setSelectedSlot(null);
+                          }}
+                          className={`w-full text-left p-3 rounded-xl border transition cursor-pointer flex items-center justify-between gap-3 ${
+                            isChosen ? theme.slotSelected : theme.slotOpen
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold truncate">{srv.name}</div>
+                            {srv.description && (
+                              <div className={`text-[11px] truncate mt-0.5 ${isChosen ? "opacity-75" : theme.mutedText}`}>
+                                {srv.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+                            <span>{srv.duration} min</span>
+                            {srv.price !== null && (
+                              <span className="font-semibold">
+                                ${srv.price.toLocaleString("es-AR")}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* FULL MONTH CALENDAR VIEW */}
               <div className={`rounded-2xl p-5 border ${theme.cardBg}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -676,7 +769,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
                       </div>
                     </div>
                     <span className={`font-mono text-[11px] px-2 py-0.5 rounded border ${theme.durationBadge}`}>
-                      {profile.slotDuration} min
+                      {effectiveDuration} min
                     </span>
                   </div>
 
@@ -724,12 +817,16 @@ export default function ProfileClient({ slug }: { slug: string }) {
                 >
                   <div className={`flex items-center justify-between pb-2 border-b ${theme.divider}`}>
                     <div className="text-xs">
-                      <span className={`block text-[11px] ${theme.mutedText}`}>Horario elegido:</span>
+                      <span className={`block text-[11px] ${theme.mutedText}`}>
+                        {selectedService ? selectedService.name : "Horario elegido:"}
+                      </span>
                       <span className={`font-semibold ${theme.titleText}`}>
                         {selectedSlot.startTime} a {selectedSlot.endTime} hs
                       </span>
                     </div>
-                    <span className={`text-[11px] font-mono ${theme.subText}`}>Confirmar</span>
+                    <span className={`text-[11px] font-mono ${theme.subText}`}>
+                      {effectiveDuration} min
+                    </span>
                   </div>
 
                   {bookingError && (

@@ -171,6 +171,9 @@ export async function ensureUserProfile(userId: string, email: string) {
       availabilities: {
         orderBy: { dayOfWeek: "asc" },
       },
+      services: {
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
 }

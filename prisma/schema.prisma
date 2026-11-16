@@ -56,7 +56,26 @@ model Profile {
   updatedAt    DateTime @updatedAt
 
   availabilities Availability[]
+  services       Service[]
   bookings       Booking[]
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String   // e.g. "Uñas común", "Uñas con diseño", "Lifting de pestañas"
+  description String?
+  duration    Int      @default(30) // Duration in minutes
+  price       Int?     // Optional price
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings Booking[]
+
+  @@index([profileId, isActive])
 }
 
 model Availability {
@@ -79,6 +98,9 @@ model Booking {
   id            String   @id @default(cuid())
   profileId     String
   profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  serviceId     String?
+  service       Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceName   String?  // Snapshot of selected service name
   customerName  String
   customerEmail String
   customerPhone String

@@ -86,6 +86,7 @@ export async function sendBookingNotificationEmails({
   ownerEmail,
   profileName,
   profileSlug,
+  serviceName,
   formattedDate,
   date,
   startTime,
@@ -99,6 +100,7 @@ export async function sendBookingNotificationEmails({
   ownerEmail: string;
   profileName: string;
   profileSlug: string;
+  serviceName?: string | null;
   formattedDate: string;
   date: string;
   startTime: string;
@@ -119,8 +121,11 @@ export async function sendBookingNotificationEmails({
 
   const startClean = `${date.replace(/-/g, "")}T${startTime.replace(/:/g, "")}00`;
   const endClean = `${date.replace(/-/g, "")}T${endTime.replace(/:/g, "")}00`;
+  const calendarTitle = serviceName
+    ? `${serviceName} — ${profileName}`
+    : `Turno con ${profileName}`;
   const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-    `Turno con ${profileName}`
+    calendarTitle
   )}&dates=${startClean}/${endClean}&details=${encodeURIComponent(
     `Turno agendado en ${appUrl}/${profileSlug}`
   )}`;
@@ -145,11 +150,14 @@ export async function sendBookingNotificationEmails({
   // 1. Email to Profile Owner
   const ownerRows: Array<[string, string]> = [
     ["Cliente", customerName],
+  ];
+  if (serviceName) ownerRows.push(["Tipo de turno", serviceName]);
+  ownerRows.push(
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`],
     ["WhatsApp", customerPhone],
-    ["Email", customerEmail],
-  ];
+    ["Email", customerEmail]
+  );
   if (notes) ownerRows.push(["Nota", notes]);
 
   const ownerHtml = renderEmailShell({
@@ -172,9 +180,12 @@ export async function sendBookingNotificationEmails({
   // 2. Email to End Customer
   const customerRows: Array<[string, string]> = [
     ["Profesional", profileName],
-    ["Fecha", formattedDate],
-    ["Horario", `${startTime} a ${endTime} hs`],
   ];
+  if (serviceName) customerRows.push(["Servicio", serviceName]);
+  customerRows.push(
+    ["Fecha", formattedDate],
+    ["Horario", `${startTime} a ${endTime} hs`]
+  );
   if (notes) customerRows.push(["Tu nota", notes]);
 
   const customerHtml = renderEmailShell({
