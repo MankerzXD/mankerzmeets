@@ -126,8 +126,7 @@ export default function TenantDashboard() {
   const [servicePrice, setServicePrice] = useState("");
   const [savingService, setSavingService] = useState(false);
 
-  // Staff form states
-  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  // Staff form states (Creación superior)
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
@@ -135,6 +134,16 @@ export default function TenantDashboard() {
   const [staffAvatarUrl, setStaffAvatarUrl] = useState("");
   const [savingStaff, setSavingStaff] = useState(false);
   const [uploadingStaffPhoto, setUploadingStaffPhoto] = useState(false);
+
+  // Staff inline edit states (Edición desplegable debajo de cada tarjeta)
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [editStaffName, setEditStaffName] = useState("");
+  const [editStaffRole, setEditStaffRole] = useState("");
+  const [editStaffEmail, setEditStaffEmail] = useState("");
+  const [editStaffPhone, setEditStaffPhone] = useState("");
+  const [editStaffAvatarUrl, setEditStaffAvatarUrl] = useState("");
+  const [savingEditStaff, setSavingEditStaff] = useState(false);
+  const [uploadingEditStaffPhoto, setUploadingEditStaffPhoto] = useState(false);
 
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -445,7 +454,6 @@ export default function TenantDashboard() {
   };
 
   const resetStaffForm = () => {
-    setEditingStaffId(null);
     setStaffName("");
     setStaffRole("");
     setStaffEmail("");
@@ -453,16 +461,14 @@ export default function TenantDashboard() {
     setStaffAvatarUrl("");
   };
 
-  const handleSubmitStaff = async (e: React.FormEvent) => {
+  const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingStaff(true);
     try {
-      const isEdit = Boolean(editingStaffId);
       const res = await fetch("/api/dashboard/staff", {
-        method: isEdit ? "PUT" : "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(isEdit ? { id: editingStaffId } : {}),
           name: staffName,
           role: staffRole,
           email: staffEmail,
@@ -472,17 +478,10 @@ export default function TenantDashboard() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al guardar el profesional");
+      if (!res.ok) throw new Error(data.error || "Error al agregar el profesional");
 
-      if (isEdit) {
-        setStaffMembers((prev) =>
-          prev.map((s) => (s.id === data.staffMember.id ? data.staffMember : s))
-        );
-        showNotification("success", "Profesional actualizado");
-      } else {
-        setStaffMembers((prev) => [...prev, data.staffMember]);
-        showNotification("success", "Profesional agregado al equipo");
-      }
+      setStaffMembers((prev) => [...prev, data.staffMember]);
+      showNotification("success", "Profesional agregado al equipo");
       resetStaffForm();
     } catch (err: unknown) {
       showNotification(
@@ -491,6 +490,87 @@ export default function TenantDashboard() {
       );
     } finally {
       setSavingStaff(false);
+    }
+  };
+
+  const handleStartEditStaff = (staff: StaffMemberItem) => {
+    if (editingStaffId === staff.id) {
+      setEditingStaffId(null);
+    } else {
+      setEditingStaffId(staff.id);
+      setEditStaffName(staff.name);
+      setEditStaffRole(staff.role || "");
+      setEditStaffEmail(staff.email || "");
+      setEditStaffPhone(staff.phone || "");
+      setEditStaffAvatarUrl(staff.avatarUrl || "");
+    }
+  };
+
+  const handleSaveEditStaff = async (e: React.FormEvent, staffId: string) => {
+    e.preventDefault();
+    setSavingEditStaff(true);
+    try {
+      const res = await fetch("/api/dashboard/staff", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: staffId,
+          name: editStaffName,
+          role: editStaffRole,
+          email: editStaffEmail,
+          phone: editStaffPhone,
+          avatarUrl: editStaffAvatarUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al actualizar profesional");
+
+      setStaffMembers((prev) =>
+        prev.map((s) => (s.id === data.staffMember.id ? data.staffMember : s))
+      );
+      showNotification("success", "Profesional actualizado");
+      setEditingStaffId(null);
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "No se pudo actualizar el profesional"
+      );
+    } finally {
+      setSavingEditStaff(false);
+    }
+  };
+
+  const handleUploadEditStaffPhoto = async (file: File) => {
+    setUploadingEditStaffPhoto(true);
+    try {
+      const compressedFile = await compressImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.82,
+        mimeType: "image/webp",
+      });
+
+      const formData = new FormData();
+      formData.append("file", compressedFile);
+      formData.append("kind", "avatar");
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al subir imagen");
+      setEditStaffAvatarUrl(data.url);
+      showNotification("success", "Foto del profesional actualizada");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al subir foto"
+      );
+    } finally {
+      setUploadingEditStaffPhoto(false);
     }
   };
 
@@ -1160,7 +1240,7 @@ export default function TenantDashboard() {
         {/* TAB: STAFF / EQUIPO */}
         {activeTab === "STAFF" && (
           <div className="space-y-6">
-            {/* Create / Edit Staff Form */}
+            {/* Create Staff Form (Siempre limpio para crear nuevos) */}
             <div className="rounded-2xl p-5 sm:p-6 border border-zinc-800 bg-[#121215]">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -1169,29 +1249,16 @@ export default function TenantDashboard() {
                   </div>
                   <div>
                     <h2 className="text-sm font-semibold text-white">
-                      {editingStaffId ? "Editar Profesional" : "Agregar Miembro al Equipo"}
+                      Agregar Miembro al Equipo
                     </h2>
                     <p className="text-xs text-zinc-400 font-light">
-                      {editingStaffId
-                        ? "Modificá los datos del barbero o profesional."
-                        : "Agregá barberos o especialistas para que tus clientes puedan elegir con quién atenderse."}
+                      Agregá barberos o especialistas para que tus clientes puedan elegir con quién atenderse.
                     </p>
                   </div>
                 </div>
-
-                {editingStaffId && (
-                  <button
-                    type="button"
-                    onClick={resetStaffForm}
-                    className="text-xs text-zinc-400 hover:text-white flex items-center gap-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Cancelar</span>
-                  </button>
-                )}
               </div>
 
-              <form onSubmit={handleSubmitStaff} className="space-y-4">
+              <form onSubmit={handleCreateStaff} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1.5">
@@ -1302,15 +1369,6 @@ export default function TenantDashboard() {
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
-                  {editingStaffId && (
-                    <button
-                      type="button"
-                      onClick={resetStaffForm}
-                      className="px-4 py-2 rounded-full border border-zinc-800 text-zinc-300 text-xs font-medium hover:bg-zinc-800 transition"
-                    >
-                      Cancelar
-                    </button>
-                  )}
                   <button
                     type="submit"
                     disabled={savingStaff}
@@ -1321,7 +1379,7 @@ export default function TenantDashboard() {
                     ) : (
                       <Check className="w-3.5 h-3.5" />
                     )}
-                    <span>{editingStaffId ? "Actualizar Profesional" : "Agregar al Equipo"}</span>
+                    <span>Agregar al Equipo</span>
                   </button>
                 </div>
               </form>
@@ -1352,100 +1410,251 @@ export default function TenantDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {staffMembers.map((staff) => (
-                    <div
-                      key={staff.id}
-                      className={`p-4 rounded-xl border transition flex flex-col justify-between ${
-                        staff.isActive
-                          ? "bg-zinc-900/40 border-zinc-800"
-                          : "bg-zinc-950/40 border-zinc-900 opacity-60"
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 text-xs font-bold text-white">
-                              {staff.avatarUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={staff.avatarUrl}
-                                  alt={staff.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                staff.name.charAt(0).toUpperCase()
-                              )}
-                            </div>
-                            <div>
-                              <div className="text-xs font-semibold text-white">
-                                {staff.name}
+                  {staffMembers.map((staff) => {
+                    const isEditingThisStaff = editingStaffId === staff.id;
+                    return (
+                      <div
+                        key={staff.id}
+                        className={`p-4 rounded-xl border transition flex flex-col justify-between ${
+                          isEditingThisStaff
+                            ? "bg-zinc-900/90 border-zinc-700 ring-1 ring-zinc-700/80 shadow-xl"
+                            : staff.isActive
+                            ? "bg-zinc-900/40 border-zinc-800"
+                            : "bg-zinc-950/40 border-zinc-900 opacity-60"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 text-xs font-bold text-white">
+                                {staff.avatarUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={staff.avatarUrl}
+                                    alt={staff.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  staff.name.charAt(0).toUpperCase()
+                                )}
                               </div>
-                              {staff.role && (
-                                <div className="text-[11px] text-zinc-400 mt-0.5 font-light">
-                                  {staff.role}
+                              <div>
+                                <div className="text-xs font-semibold text-white">
+                                  {staff.name}
                                 </div>
-                              )}
+                                {staff.role && (
+                                  <div className="text-[11px] text-zinc-400 mt-0.5 font-light">
+                                    {staff.role}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                                staff.isActive
+                                  ? "bg-emerald-950/70 text-emerald-300 border border-emerald-900/60"
+                                  : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                              }`}
+                            >
+                              {staff.isActive ? "Activo" : "Pausado"}
+                            </span>
                           </div>
 
-                          <span
-                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                              staff.isActive
-                                ? "bg-emerald-950/70 text-emerald-300 border border-emerald-900/60"
-                                : "bg-zinc-800 text-zinc-400 border border-zinc-700"
-                            }`}
-                          >
-                            {staff.isActive ? "Activo" : "Pausado"}
-                          </span>
+                          <div className="space-y-1 text-[11px] text-zinc-400 font-light mt-2">
+                            {staff.email && (
+                              <div className="truncate">✉️ {staff.email}</div>
+                            )}
+                            {staff.phone && (
+                              <div className="font-mono">📱 {staff.phone}</div>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="space-y-1 text-[11px] text-zinc-400 font-light mt-2">
-                          {staff.email && (
-                            <div className="truncate">✉️ {staff.email}</div>
-                          )}
-                          {staff.phone && (
-                            <div className="font-mono">📱 {staff.phone}</div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStaff(staff)}
-                          className="text-xs text-zinc-400 hover:text-white font-medium"
-                        >
-                          {staff.isActive ? "Pausar" : "Activar"}
-                        </button>
-
-                        <div className="flex items-center gap-1.5">
+                        {/* Card Actions */}
+                        <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
                           <button
                             type="button"
-                            onClick={() => {
-                              setEditingStaffId(staff.id);
-                              setStaffName(staff.name);
-                              setStaffRole(staff.role || "");
-                              setStaffEmail(staff.email || "");
-                              setStaffPhone(staff.phone || "");
-                              setStaffAvatarUrl(staff.avatarUrl || "");
-                            }}
-                            title="Editar"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                            onClick={() => handleToggleStaff(staff)}
+                            className="text-xs text-zinc-400 hover:text-white font-medium"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            {staff.isActive ? "Pausar" : "Activar"}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteStaff(staff.id)}
-                            title="Eliminar"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditStaff(staff)}
+                              title={isEditingThisStaff ? "Cerrar edición" : "Editar datos"}
+                              className={`p-1.5 rounded-lg transition ${
+                                isEditingThisStaff
+                                  ? "bg-white text-zinc-950 font-bold"
+                                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                              }`}
+                            >
+                              {isEditingThisStaff ? (
+                                <X className="w-3.5 h-3.5" />
+                              ) : (
+                                <Pencil className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStaff(staff.id)}
+                              title="Eliminar"
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
+
+                        {/* DESPLEGABLE INLINE: Edición directa debajo de la tarjeta del trabajador */}
+                        {isEditingThisStaff && (
+                          <form
+                            onSubmit={(e) => handleSaveEditStaff(e, staff.id)}
+                            className="mt-4 pt-4 border-t border-zinc-700/80 space-y-3 animate-fade-in text-left"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-zinc-200">
+                                Editar a {staff.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingStaffId(null)}
+                                className="text-[11px] text-zinc-400 hover:text-white"
+                              >
+                                Cerrar
+                              </button>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-zinc-400 mb-1">
+                                Nombre y Apellido *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={editStaffName}
+                                onChange={(e) => setEditStaffName(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-zinc-400 mb-1">
+                                Rol / Especialidad
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="ej. Barbero Senior, Colorista"
+                                value={editStaffRole}
+                                onChange={(e) => setEditStaffRole(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-zinc-400 mb-1">
+                                Email
+                              </label>
+                              <input
+                                type="email"
+                                placeholder="ej. barbero@gmail.com"
+                                value={editStaffEmail}
+                                onChange={(e) => setEditStaffEmail(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-zinc-400 mb-1">
+                                WhatsApp / Teléfono
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="ej. 5491122334455"
+                                value={editStaffPhone}
+                                onChange={(e) => setEditStaffPhone(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Photo upload for Inline Edit */}
+                            <div>
+                              <label className="block text-[11px] text-zinc-400 mb-1">
+                                Foto del profesional
+                              </label>
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 text-xs">
+                                  {editStaffAvatarUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={editStaffAvatarUrl}
+                                      alt="Foto"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <User className="w-3.5 h-3.5 text-zinc-500" />
+                                  )}
+                                </div>
+
+                                <label className="cursor-pointer px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-[11px] text-zinc-200 font-medium transition flex items-center gap-1">
+                                  {uploadingEditStaffPhoto ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Upload className="w-3 h-3" />
+                                  )}
+                                  <span>{uploadingEditStaffPhoto ? "Subiendo..." : "Cambiar foto"}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleUploadEditStaffPhoto(file);
+                                    }}
+                                  />
+                                </label>
+
+                                {editStaffAvatarUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditStaffAvatarUrl("")}
+                                    className="text-[10px] text-zinc-400 hover:text-rose-400"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingStaffId(null)}
+                                className="px-3 py-1 rounded-full border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-800 transition"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={savingEditStaff}
+                                className="px-4 py-1 rounded-full bg-white text-zinc-950 text-xs font-semibold hover:bg-zinc-200 transition flex items-center gap-1.5 disabled:opacity-50"
+                              >
+                                {savingEditStaff ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Check className="w-3 h-3" />
+                                )}
+                                <span>Guardar cambios</span>
+                              </button>
+                            </div>
+                          </form>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
