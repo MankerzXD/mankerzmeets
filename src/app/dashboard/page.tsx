@@ -27,6 +27,7 @@ import {
   Clock,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
+import { compressImageFile } from "@/lib/image-compress";
 
 interface DaySchedule {
   dayOfWeek: number;
@@ -240,8 +241,16 @@ export default function TenantDashboard() {
     setLoadingState(true);
 
     try {
+      // Compress client-side before sending to save bandwidth and prevent 413 errors
+      const compressedFile = await compressImageFile(file, {
+        maxWidth: kind === "avatar" ? 600 : 1600,
+        maxHeight: kind === "avatar" ? 600 : 800,
+        quality: 0.82,
+        mimeType: "image/webp",
+      });
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressedFile);
       formData.append("kind", kind);
 
       const res = await fetch("/api/upload", {
@@ -531,8 +540,16 @@ export default function TenantDashboard() {
   const handleUploadStaffPhoto = async (file: File) => {
     setUploadingStaffPhoto(true);
     try {
+      // Compress staff photo before uploading
+      const compressedFile = await compressImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.82,
+        mimeType: "image/webp",
+      });
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressedFile);
       formData.append("kind", "avatar");
 
       const res = await fetch("/api/upload", {

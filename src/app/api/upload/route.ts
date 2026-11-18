@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { getSession } from "@/lib/auth";
 import { getSupabaseAdmin, PROFILE_MEDIA_BUCKET } from "@/lib/supabase";
 
@@ -8,7 +9,7 @@ const ALLOWED_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
-const MAX_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
+const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (will be compressed down to <100 KB)
 
 export async function POST(req: Request) {
   try {
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
 
     if (file.size > MAX_SIZE_BYTES) {
       return NextResponse.json(
-        { error: "La imagen supera el límite de 4 MB." },
+        { error: "La imagen supera el límite de 10 MB." },
         { status: 400 }
       );
     }
@@ -54,15 +55,54 @@ export async function POST(req: Request) {
       });
     }
 
-    const ext = file.type.split("/")[1] || "png";
     const safeKind = kind === "banner" ? "banner" : "avatar";
-    const filePath = `${session.userId}/${safeKind}-${Date.now()}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const originalBuffer = Buffer.from(await file.arrayBuffer());
+
+    let finalBuffer: Buffer = originalBuffer;
+    let finalContentType = file.type;
+    let fileExt = file.type.split("/")[1] || "png";
+
+    // Server-side compression using sharp
+    try {
+      if (file.type !== "image/gif") {
+        if (safeKind === "banner") {
+          // Banner: max width 1600, max height 600, fit inside, high quality WebP
+          finalBuffer = await sharp(originalBuffer)
+            .resize({
+              width: 1600,
+              height: 600,
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 82, effort: 4 })
+            .toBuffer();
+        } else {
+          // Avatar (Profile & Staff): max width 600, max height 600, fit cover, crisp WebP
+          finalBuffer = await sharp(originalBuffer)
+            .resize({
+              width: 600,
+              height: 600,
+              fit: "cover",
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 82, effort: 4 })
+            .toBuffer();
+        }
+
+        finalContentType = "image/webp";
+        fileExt = "webp";
+      }
+    } catch (compressErr) {
+      console.warn("Sharp compression fallback to original buffer:", compressErr);
+      finalBuffer = originalBuffer;
+    }
+
+    const filePath = `${session.userId}/${safeKind}-${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from(PROFILE_MEDIA_BUCKET)
-      .upload(filePath, buffer, {
-        contentType: file.type,
+      .upload(filePath, finalBuffer, {
+        contentType: finalContentType,
         upsert: true,
       });
 
@@ -77,6 +117,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       url: publicData.publicUrl,
+      sizeBytes: finalBuffer.length,
+      format: fileExt,
     });
   } catch (error) {
     console.error("Upload error:", error);
