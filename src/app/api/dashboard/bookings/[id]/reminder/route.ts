@@ -18,7 +18,14 @@ export async function POST(
 
     const profile = await prisma.profile.findUnique({
       where: { userId: session.userId },
-      select: { id: true, name: true, slug: true, whatsapp: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        whatsapp: true,
+        address: true,
+        addressUrl: true,
+      },
     });
 
     if (!profile) {
@@ -87,6 +94,8 @@ export async function POST(
       endTime: booking.endTime,
       managementCode: booking.managementCode,
       manageUrl,
+      address: profile.address,
+      addressUrl: profile.addressUrl,
       reminderType: "MANUAL",
     });
 

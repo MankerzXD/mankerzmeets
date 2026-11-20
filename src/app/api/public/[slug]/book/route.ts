@@ -331,6 +331,8 @@ export async function POST(
       managementCode: result.booking.managementCode,
       manageUrl,
       cancelNoticeHours: profile.cancelNoticeHours,
+      address: profile.address,
+      addressUrl: profile.addressUrl,
     });
 
     return NextResponse.json({

@@ -27,6 +27,8 @@ export async function GET(
         template: true,
         whatsapp: true,
         instagram: true,
+        address: true,
+        addressUrl: true,
         timezone: true,
         status: true,
         slotDuration: true,

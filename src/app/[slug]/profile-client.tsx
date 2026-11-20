@@ -21,6 +21,8 @@ import {
   Copy,
   CreditCard,
   RotateCcw,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { InstagramIcon } from "@/components/icons";
 import { formatDateSpanish } from "@/lib/utils";
@@ -58,6 +60,8 @@ interface PublicProfile {
   template: string;
   whatsapp: string;
   instagram: string | null;
+  address?: string | null;
+  addressUrl?: string | null;
   timezone?: string;
   status: string;
   slotDuration: number;
@@ -564,6 +568,29 @@ export default function ProfileClient({ slug }: { slug: string }) {
                 {profile.bio}
               </p>
             )}
+            {profile.address && (
+              <div className="mt-2.5">
+                <a
+                  href={
+                    profile.addressUrl
+                      ? profile.addressUrl
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          profile.address
+                        )}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition ${theme.socialBtn}`}
+                  title="Abrir ubicación en Google Maps"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="font-medium underline decoration-zinc-700/60 underline-offset-2">
+                    {profile.address}
+                  </span>
+                  <ExternalLink className="w-3 h-3 text-zinc-500" />
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
@@ -612,6 +639,27 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     {bookingResult.booking.startTime} a {bookingResult.booking.endTime} hs
                   </span>
                 </div>
+                {profile.address && (
+                  <div className="flex justify-between items-center pt-1 border-t border-zinc-800/40">
+                    <span className={theme.mutedText}>Ubicación:</span>
+                    <a
+                      href={
+                        profile.addressUrl
+                          ? profile.addressUrl
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                              profile.address
+                            )}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="truncate max-w-[200px]">{profile.address}</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* BOOKING CODE BANNER */}

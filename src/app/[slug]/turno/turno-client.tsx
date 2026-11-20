@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   RotateCcw,
   Search,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { formatDateSpanish } from "@/lib/utils";
 
@@ -48,6 +50,8 @@ interface TurnoProfile {
   slug: string;
   title: string;
   whatsapp: string;
+  address?: string | null;
+  addressUrl?: string | null;
   cancelNoticeHours: number;
 }
 
@@ -501,6 +505,30 @@ export default function TurnoClient({
                     {booking.customerName}
                   </span>
                 </div>
+
+                {profile?.address && (
+                  <div className="flex justify-between items-center py-1 border-t border-zinc-800/60">
+                    <span className="text-zinc-500 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" />
+                      Ubicación:
+                    </span>
+                    <a
+                      href={
+                        profile.addressUrl
+                          ? profile.addressUrl
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                              profile.address
+                            )}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-emerald-400 hover:underline flex items-center gap-1 max-w-[200px]"
+                    >
+                      <span className="truncate">{profile.address}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Status explanation notice if cancelled */}

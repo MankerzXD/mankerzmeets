@@ -83,6 +83,8 @@ export async function GET(
         slug: true,
         title: true,
         whatsapp: true,
+        address: true,
+        addressUrl: true,
         cancelNoticeHours: true,
         timezone: true,
         slotDuration: true,
@@ -155,6 +157,8 @@ export async function GET(
         slug: profile.slug,
         title: profile.title,
         whatsapp: profile.whatsapp,
+        address: profile.address,
+        addressUrl: profile.addressUrl,
         cancelNoticeHours: profile.cancelNoticeHours ?? 0,
       },
       policy: {

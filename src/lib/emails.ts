@@ -111,6 +111,8 @@ export async function sendBookingNotificationEmails({
   managementCode,
   manageUrl,
   cancelNoticeHours,
+  address,
+  addressUrl,
 }: {
   ownerEmail: string;
   profileName: string;
@@ -131,6 +133,8 @@ export async function sendBookingNotificationEmails({
   managementCode?: string | null;
   manageUrl?: string | null;
   cancelNoticeHours?: number;
+  address?: string | null;
+  addressUrl?: string | null;
 }): Promise<{ ownerSent: boolean; customerSent: boolean; staffSent?: boolean }> {
   const { resend, from, appUrl } = getResendConfig();
 
@@ -226,6 +230,7 @@ export async function sendBookingNotificationEmails({
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`]
   );
+  if (address) customerRows.push(["Dirección", address]);
   if (depositInfo?.required) {
     if (depositInfo.amount) {
       customerRows.push(["Seña a transferir", `$${depositInfo.amount.toLocaleString("es-AR")}`]);
@@ -711,6 +716,8 @@ export async function sendBookingReminderEmail({
   endTime,
   managementCode,
   manageUrl,
+  address,
+  addressUrl,
   reminderType = "24H",
 }: {
   customerEmail: string;
@@ -726,6 +733,8 @@ export async function sendBookingReminderEmail({
   endTime: string;
   managementCode?: string | null;
   manageUrl?: string | null;
+  address?: string | null;
+  addressUrl?: string | null;
   reminderType?: "24H" | "2H" | "MANUAL";
 }): Promise<boolean> {
   const { resend, from, appUrl } = getResendConfig();
@@ -772,6 +781,7 @@ export async function sendBookingReminderEmail({
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`]
   );
+  if (address) detailsRows.push(["Dirección", address]);
 
   const summaryRowsHtml = `
     <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; margin-bottom: 18px;">

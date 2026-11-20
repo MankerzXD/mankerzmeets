@@ -48,6 +48,8 @@ model Profile {
   template     String   @default("MINIMAL_DARK") // "MINIMAL_DARK" | "CLEAN_EDITORIAL"
   whatsapp     String   @default("") // Format with country code (e.g., "5491122334455")
   instagram    String?  // Instagram username without @
+  address      String?  // Physical street address (e.g. "Av. Corrientes 1234, CABA")
+  addressUrl   String?  // Optional direct Google Maps URL
   timezone     String   @default("America/Argentina/Buenos_Aires")
   status       String   @default("ACTIVE") // "ACTIVE" | "SUSPENDED" (SuperAdmin billing control)
   slotDuration Int      @default(30) // Booking slot duration in minutes

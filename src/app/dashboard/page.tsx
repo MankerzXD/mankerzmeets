@@ -35,6 +35,7 @@ import {
   RotateCcw,
   Bell,
   Send,
+  MapPin,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -80,6 +81,8 @@ interface ProfileData {
   template: string;
   whatsapp: string;
   instagram: string | null;
+  address?: string | null;
+  addressUrl?: string | null;
   timezone: string;
   status: string;
   slotDuration: number;
@@ -232,6 +235,8 @@ export default function TenantDashboard() {
   const [template, setTemplate] = useState("MINIMAL_DARK");
   const [whatsapp, setWhatsapp] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [address, setAddress] = useState("");
+  const [addressUrl, setAddressUrl] = useState("");
   const [timezone, setTimezone] = useState("America/Argentina/Buenos_Aires");
   const [slotDuration, setSlotDuration] = useState(30);
   const [cancelNoticeHours, setCancelNoticeHours] = useState(0);
@@ -277,6 +282,8 @@ export default function TenantDashboard() {
           setTemplate(p.template || "MINIMAL_DARK");
           setWhatsapp(p.whatsapp || "");
           setInstagram(p.instagram || "");
+          setAddress(p.address || "");
+          setAddressUrl(p.addressUrl || "");
           setTimezone(p.timezone || "America/Argentina/Buenos_Aires");
           setSlotDuration(p.slotDuration || 30);
           setServices(p.services || []);
@@ -3509,21 +3516,21 @@ export default function TenantDashboard() {
           </form>
         )}
 
-        {/* TAB 4: CONTACT & SOCIALS */}
+        {/* TAB 4: CONTACT & LOCATION */}
         {activeTab === "CONTACT" && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleSaveProfile({ whatsapp, instagram });
+              handleSaveProfile({ whatsapp, instagram, address, addressUrl });
             }}
             className="space-y-4"
           >
             <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-sm font-semibold text-white">Canales de Contacto</h2>
+                  <h2 className="text-sm font-semibold text-white">Canales de Contacto & Ubicación</h2>
                   <p className="text-xs text-zinc-400 mt-0.5 font-light">
-                    Configurá tu WhatsApp e Instagram para contacto directo.
+                    Configurá tu WhatsApp, Instagram y la dirección física de tu local para que tus clientes te encuentren.
                   </p>
                 </div>
                 <button
@@ -3587,6 +3594,73 @@ export default function TenantDashboard() {
                       <ExternalLink className="w-3 h-3" />
                       <span>Ver instagram.com/{instagram}</span>
                     </a>
+                  )}
+                </div>
+
+                {/* DIRECCIÓN FÍSICA & GOOGLE MAPS */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 md:col-span-2 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                    <div>
+                      <span className="block text-xs font-semibold text-white">
+                        Dirección del Local / Consultorio
+                      </span>
+                      <p className="text-[11px] text-zinc-400 font-light">
+                        Aparecerá en tu perfil público con un botón interactivo para abrir la ubicación en Google Maps.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-zinc-300 mb-1">
+                        Dirección (Calle, número, barrio o ciudad)
+                      </label>
+                      <input
+                        type="text"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        placeholder="Ej: Av. Corrientes 1234, CABA"
+                        className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] text-zinc-300 mb-1">
+                        Enlace personalizado de Google Maps (Opcional)
+                      </label>
+                      <input
+                        type="url"
+                        value={addressUrl}
+                        onChange={(e) => setAddressUrl(e.target.value)}
+                        placeholder="Ej: https://maps.app.goo.gl/... (o dejar vacío)"
+                        className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {address.trim() && (
+                    <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-t border-zinc-800/60">
+                      <span className="text-[11px] text-zinc-400">
+                        Hacé clic para confirmar que el pin de Google Maps sea el correcto:
+                      </span>
+                      <a
+                        href={
+                          addressUrl.trim()
+                            ? addressUrl.trim()
+                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                address.trim()
+                              )}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-emerald-400 border border-zinc-700 flex items-center gap-1.5 transition"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>Confirmar y ver en Google Maps</span>
+                        <ExternalLink className="w-3 h-3 text-zinc-500" />
+                      </a>
+                    </div>
                   )}
                 </div>
               </div>

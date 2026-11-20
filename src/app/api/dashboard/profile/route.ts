@@ -74,6 +74,8 @@ export async function PUT(req: Request) {
       cancelNoticeHours,
       enableReminders,
       reminderTiming,
+      address,
+      addressUrl,
     } = body;
 
     const cleanSlug =
@@ -125,6 +127,8 @@ export async function PUT(req: Request) {
         ...(template !== undefined && { template }),
         ...(whatsapp !== undefined && { whatsapp: whatsapp.replace(/[^\d]/g, "") }),
         ...(instagram !== undefined && { instagram: instagram.replace(/[@\s]/g, "") || null }),
+        ...(address !== undefined && { address: address ? address.trim() : null }),
+        ...(addressUrl !== undefined && { addressUrl: addressUrl ? addressUrl.trim() : null }),
         ...(timezone !== undefined && { timezone }),
         ...(slotDuration !== undefined && { slotDuration: Number(slotDuration) }),
         ...(cleanSlug && { slug: cleanSlug }),

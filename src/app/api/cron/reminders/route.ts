@@ -47,6 +47,8 @@ async function processReminders(req: Request) {
           name: true,
           slug: true,
           whatsapp: true,
+          address: true,
+          addressUrl: true,
           reminderTiming: true,
         },
       },
@@ -96,6 +98,8 @@ async function processReminders(req: Request) {
           endTime: booking.endTime,
           managementCode: booking.managementCode,
           manageUrl,
+          address: booking.profile.address,
+          addressUrl: booking.profile.addressUrl,
           reminderType: "24H",
         });
 
@@ -132,6 +136,8 @@ async function processReminders(req: Request) {
           endTime: booking.endTime,
           managementCode: booking.managementCode,
           manageUrl,
+          address: booking.profile.address,
+          addressUrl: booking.profile.addressUrl,
           reminderType: "2H",
         });
 
