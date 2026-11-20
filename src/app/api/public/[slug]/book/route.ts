@@ -217,6 +217,19 @@ export async function POST(
         profile.depositRequired && Boolean(profile.bankAlias || profile.bankCbu);
       const initialPaymentStatus = isDepositRequired ? "PENDING" : "EXEMPT";
 
+      let calculatedDepositAmount: number | null = null;
+      if (isDepositRequired) {
+        if (profile.depositPercentage && selectedService?.price) {
+          calculatedDepositAmount = Math.round(
+            (selectedService.price * profile.depositPercentage) / 100
+          );
+        } else if (profile.depositAmount) {
+          calculatedDepositAmount = profile.depositAmount;
+        } else if (profile.depositPercentage && !selectedService?.price) {
+          calculatedDepositAmount = profile.depositAmount || null;
+        }
+      }
+
       const booking = await tx.booking.create({
         data: {
           profileId: profile.id,
@@ -234,11 +247,11 @@ export async function POST(
           notes: (notes || "").trim(),
           status: "CONFIRMED",
           paymentStatus: initialPaymentStatus,
-          depositAmount: isDepositRequired ? profile.depositAmount : null,
+          depositAmount: calculatedDepositAmount,
         },
       });
 
-      return { conflict: false as const, booking, assignedStaff, isDepositRequired };
+      return { conflict: false as const, booking, assignedStaff, isDepositRequired, calculatedDepositAmount };
     });
 
     if (result.conflict) {
@@ -260,8 +273,8 @@ export async function POST(
       ? `\n💈 *Profesional:* ${result.assignedStaff.name}`
       : "";
     const depositLine =
-      result.isDepositRequired && profile.depositAmount
-        ? `\n💳 *Seña bancaria ($${profile.depositAmount.toLocaleString("es-AR")}):* Te adjunto el comprobante de transferencia a continuación.`
+      result.isDepositRequired && result.calculatedDepositAmount
+        ? `\n💳 *Seña bancaria ($${result.calculatedDepositAmount.toLocaleString("es-AR")}${profile.depositPercentage && selectedService?.price ? ` - ${profile.depositPercentage}%` : ""}):* Te adjunto el comprobante de transferencia a continuación.`
         : result.isDepositRequired
         ? `\n💳 *Seña bancaria:* Te adjunto el comprobante de transferencia a continuación.`
         : "";
@@ -278,7 +291,8 @@ export async function POST(
     const depositInfo = result.isDepositRequired
       ? {
           required: true,
-          amount: profile.depositAmount,
+          amount: result.calculatedDepositAmount,
+          percentage: profile.depositPercentage,
           alias: profile.bankAlias,
           cbu: profile.bankCbu,
           holder: profile.bankHolder,

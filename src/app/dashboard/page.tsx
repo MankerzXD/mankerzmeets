@@ -81,6 +81,7 @@ interface ProfileData {
   status: string;
   slotDuration: number;
   depositRequired: boolean;
+  depositPercentage: number | null;
   depositAmount: number | null;
   bankAlias: string | null;
   bankCbu: string | null;
@@ -151,6 +152,7 @@ export default function TenantDashboard() {
 
   // Bank transfer / deposit settings
   const [depositRequired, setDepositRequired] = useState(false);
+  const [depositPercentage, setDepositPercentage] = useState("50");
   const [depositAmount, setDepositAmount] = useState("");
   const [bankAlias, setBankAlias] = useState("");
   const [bankCbu, setBankCbu] = useState("");
@@ -266,6 +268,11 @@ export default function TenantDashboard() {
           setServices(p.services || []);
           setStaffMembers(p.staffMembers || []);
           setDepositRequired(Boolean(p.depositRequired));
+          setDepositPercentage(
+            p.depositPercentage !== null && p.depositPercentage !== undefined
+              ? String(p.depositPercentage)
+              : "50"
+          );
           setDepositAmount(p.depositAmount !== null && p.depositAmount !== undefined ? String(p.depositAmount) : "");
           setBankAlias(p.bankAlias || "");
           setBankCbu(p.bankCbu || "");
@@ -460,6 +467,7 @@ export default function TenantDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           depositRequired,
+          depositPercentage: depositPercentage.trim() ? Number(depositPercentage) : null,
           depositAmount: depositAmount.trim() ? Number(depositAmount) : null,
           bankAlias,
           bankCbu,
@@ -2931,13 +2939,41 @@ export default function TenantDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Monto de la seña */}
+                {/* Porcentaje de la seña */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Porcentaje de la seña (%)</span>
+                    </label>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-900/50">
+                      Recomendado
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mb-2">
+                    Porcentaje que elegís cobrar sobre el precio del servicio (ej: 50% de un corte de $10.000 = $5.000).
+                  </p>
+                  <div className="flex items-center rounded-xl minimal-input px-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={depositPercentage}
+                      onChange={(e) => setDepositPercentage(e.target.value)}
+                      placeholder="Ej: 50"
+                      className="w-full py-2 bg-transparent text-xs text-white outline-none font-mono"
+                    />
+                    <span className="text-xs text-zinc-400 font-mono ml-1">%</span>
+                  </div>
+                </div>
+
+                {/* Monto fijo de respaldo */}
                 <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
                   <label className="block text-xs font-semibold text-white mb-1">
-                    Monto de la seña ($ ARS)
+                    Monto fijo de respaldo ($ ARS) (Opcional)
                   </label>
                   <p className="text-[11px] text-zinc-400 mb-2">
-                    Monto fijo solicitado al reservar (ej: 2000, 3000, etc.).
+                    Se utilizará solo si el turno elegido no tiene un precio definido.
                   </p>
                   <div className="flex items-center rounded-xl minimal-input px-3">
                     <span className="text-xs text-zinc-400 font-mono mr-1">$</span>
@@ -2947,7 +2983,7 @@ export default function TenantDashboard() {
                       step="100"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
-                      placeholder="Ej: 2000"
+                      placeholder="Ej: 3000"
                       className="w-full py-2 bg-transparent text-xs text-white outline-none font-mono"
                     />
                   </div>
@@ -2988,7 +3024,7 @@ export default function TenantDashboard() {
                 </div>
 
                 {/* CBU / CVU */}
-                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 md:col-span-2">
                   <label className="block text-xs font-semibold text-white mb-1">
                     CBU o CVU (Opcional)
                   </label>

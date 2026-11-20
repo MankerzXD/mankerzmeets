@@ -61,6 +61,7 @@ interface PublicProfile {
   status: string;
   slotDuration: number;
   depositRequired?: boolean;
+  depositPercentage?: number | null;
   depositAmount?: number | null;
   bankAlias?: string | null;
   bankCbu?: string | null;
@@ -122,6 +123,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
     depositInfo?: {
       required: boolean;
       amount: number | null;
+      percentage?: number | null;
       alias: string | null;
       cbu: string | null;
       holder: string | null;
@@ -601,7 +603,9 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     <span>
                       Paso importante: Seña requerida
                       {bookingResult.depositInfo.amount
-                        ? ` ($${bookingResult.depositInfo.amount.toLocaleString("es-AR")})`
+                        ? ` ($${bookingResult.depositInfo.amount.toLocaleString("es-AR")}${bookingResult.depositInfo.percentage ? ` — ${bookingResult.depositInfo.percentage}%` : ""})`
+                        : bookingResult.depositInfo.percentage
+                        ? ` (${bookingResult.depositInfo.percentage}%)`
                         : ""}
                     </span>
                   </div>
@@ -1104,8 +1108,35 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     <div className="p-3 rounded-xl border border-amber-900/40 bg-amber-950/20 text-left text-xs text-amber-200 flex items-start gap-2">
                       <CreditCard className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                       <div className="text-[11px] leading-relaxed">
-                        <strong className="text-amber-300 font-semibold block">Seña requerida para este turno</strong>
-                        Se solicitará una seña {profile.depositAmount ? `de $${profile.depositAmount.toLocaleString("es-AR")}` : ""} por transferencia bancaria. Al confirmar verás el Alias para transferir y enviar el comprobante.
+                        <strong className="text-amber-300 font-semibold block mb-0.5">
+                          Seña requerida para este turno
+                        </strong>
+                        {selectedService?.price && profile.depositPercentage ? (
+                          <span>
+                            Seña del <strong>{profile.depositPercentage}%</strong> equivalente a{" "}
+                            <strong className="text-white font-mono font-semibold">
+                              ${Math.round((selectedService.price * profile.depositPercentage) / 100).toLocaleString("es-AR")}
+                            </strong>{" "}
+                            (sobre el valor de ${selectedService.price.toLocaleString("es-AR")}).
+                          </span>
+                        ) : profile.depositPercentage ? (
+                          <span>
+                            Se solicitará una seña del <strong>{profile.depositPercentage}%</strong> por transferencia bancaria.
+                          </span>
+                        ) : profile.depositAmount ? (
+                          <span>
+                            Se solicitará una seña de{" "}
+                            <strong className="text-white font-mono font-semibold">
+                              ${profile.depositAmount.toLocaleString("es-AR")}
+                            </strong>{" "}
+                            por transferencia bancaria.
+                          </span>
+                        ) : (
+                          <span>Se solicitará una seña por transferencia bancaria.</span>
+                        )}
+                        <span className="block mt-1 text-amber-300/80">
+                          Al confirmar verás el Alias para transferir y enviar el comprobante.
+                        </span>
                       </div>
                     </div>
                   )}

@@ -31,6 +31,7 @@ export async function GET(
         status: true,
         slotDuration: true,
         depositRequired: true,
+        depositPercentage: true,
         depositAmount: true,
         bankAlias: true,
         bankCbu: true,

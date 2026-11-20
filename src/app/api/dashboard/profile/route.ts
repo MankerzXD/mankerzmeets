@@ -65,6 +65,7 @@ export async function PUT(req: Request) {
       slotDuration,
       slug,
       depositRequired,
+      depositPercentage,
       depositAmount,
       bankAlias,
       bankCbu,
@@ -125,6 +126,12 @@ export async function PUT(req: Request) {
         ...(slotDuration !== undefined && { slotDuration: Number(slotDuration) }),
         ...(cleanSlug && { slug: cleanSlug }),
         ...(depositRequired !== undefined && { depositRequired: Boolean(depositRequired) }),
+        ...(depositPercentage !== undefined && {
+          depositPercentage:
+            depositPercentage !== null && depositPercentage !== ""
+              ? Math.min(100, Math.max(1, Math.round(Number(depositPercentage))))
+              : null,
+        }),
         ...(depositAmount !== undefined && {
           depositAmount: depositAmount !== null && depositAmount !== "" ? Math.max(0, Math.round(Number(depositAmount))) : null,
         }),

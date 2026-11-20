@@ -56,9 +56,10 @@ model Profile {
   updatedAt    DateTime @updatedAt
 
   // Bank transfer deposit settings to prevent no-shows
-  depositRequired Boolean  @default(false)
-  depositAmount   Int?     // Fixed deposit amount in ARS (e.g. 3000)
-  bankAlias       String?  // e.g. "barberia.flow.mp"
+  depositRequired    Boolean  @default(false)
+  depositPercentage  Int?     // Percentage of service price to request as deposit (e.g. 30%, 50%)
+  depositAmount      Int?     // Fixed fallback deposit amount in ARS (e.g. 3000)
+  bankAlias          String?  // e.g. "barberia.flow.mp"
   bankCbu         String?  // 22-digit CBU or CVU
   bankHolder      String?  // e.g. "Lucas Gómez - Mercado Pago / Banco Galicia"
   depositNotes    String?  // Custom instructions for the client
