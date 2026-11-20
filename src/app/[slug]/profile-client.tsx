@@ -20,6 +20,7 @@ import {
   MessageCircle,
   Copy,
   CreditCard,
+  RotateCcw,
 } from "lucide-react";
 import { InstagramIcon } from "@/components/icons";
 import { formatDateSpanish } from "@/lib/utils";
@@ -118,7 +119,12 @@ export default function ProfileClient({ slug }: { slug: string }) {
       endTime: string;
       serviceName?: string | null;
       staffMemberName?: string | null;
+      managementCode?: string | null;
+      cancellationToken?: string | null;
     };
+    managementCode?: string | null;
+    cancellationToken?: string | null;
+    manageUrl?: string | null;
     whatsappUrl: string | null;
     depositInfo?: {
       required: boolean;
@@ -134,6 +140,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
 
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedAlias, setCopiedAlias] = useState(false);
+  const [copiedBookingCode, setCopiedBookingCode] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -318,6 +325,9 @@ export default function ProfileClient({ slug }: { slug: string }) {
 
       setBookingResult({
         booking: data.booking,
+        managementCode: data.managementCode || data.booking?.managementCode,
+        cancellationToken: data.cancellationToken || data.booking?.cancellationToken,
+        manageUrl: data.manageUrl,
         whatsappUrl: data.whatsappUrl,
         depositInfo: data.depositInfo,
       });
@@ -475,6 +485,15 @@ export default function ProfileClient({ slug }: { slug: string }) {
             />
           )}
 
+          <Link
+            href={`/${profile.slug}/turno`}
+            title="Consultar o gestionar turno"
+            className={`absolute top-3.5 left-3.5 px-3 py-1.5 rounded-full backdrop-blur-md border text-xs font-medium transition shadow-sm flex items-center gap-1.5 ${theme.shareBtn}`}
+          >
+            <RotateCcw className="w-3 h-3 text-zinc-400" />
+            <span>Mi turno</span>
+          </Link>
+
           <button
             onClick={handleCopyProfileUrl}
             title="Compartir perfil"
@@ -594,6 +613,33 @@ export default function ProfileClient({ slug }: { slug: string }) {
                   </span>
                 </div>
               </div>
+
+              {/* BOOKING CODE BANNER */}
+              {(bookingResult.managementCode || bookingResult.booking.managementCode) && (
+                <div className="mt-4 p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/80 text-left flex items-center justify-between">
+                  <div>
+                    <span className="block text-[10px] text-zinc-400 uppercase tracking-wider">
+                      Código de seguimiento
+                    </span>
+                    <span className="text-base font-mono font-bold text-white tracking-widest">
+                      {bookingResult.managementCode || bookingResult.booking.managementCode}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = (bookingResult.managementCode || bookingResult.booking.managementCode)!;
+                      navigator.clipboard.writeText(code);
+                      setCopiedBookingCode(true);
+                      setTimeout(() => setCopiedBookingCode(false), 2000);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedBookingCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedBookingCode ? "Copiado" : "Copiar"}</span>
+                  </button>
+                </div>
+              )}
 
               {/* DEPOSIT TRANSFER DETAILS */}
               {bookingResult.depositInfo?.required && (
@@ -730,6 +776,17 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     <Clock className="w-3 h-3" />
                     <span>Guardar iCal</span>
                   </button>
+                </div>
+
+                {/* 1-Click Manage / Cancel button */}
+                <div className="pt-1">
+                  <Link
+                    href={`/${profile.slug}/turno/${bookingResult.cancellationToken || bookingResult.booking.cancellationToken || bookingResult.managementCode || ""}`}
+                    className="w-full py-2.5 px-3 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white font-medium text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>¿No podés asistir? Cancelar o Reprogramar Turno</span>
+                  </Link>
                 </div>
               </div>
 

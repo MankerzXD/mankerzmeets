@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { generateBookingCode, generateBookingToken } from "@/lib/booking-code";
 
 export async function GET() {
   try {
@@ -148,6 +149,8 @@ export async function POST(req: Request) {
         status: status || "COMPLETED",
         paymentStatus: "EXEMPT",
         notes: notes ? notes.trim() : null,
+        managementCode: generateBookingCode(),
+        cancellationToken: generateBookingToken(),
       },
       include: {
         staffMember: {

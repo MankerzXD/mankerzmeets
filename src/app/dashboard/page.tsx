@@ -32,6 +32,7 @@ import {
   DollarSign,
   Wallet,
   CalendarDays,
+  RotateCcw,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -87,6 +88,7 @@ interface ProfileData {
   bankCbu: string | null;
   bankHolder: string | null;
   depositNotes: string | null;
+  cancelNoticeHours?: number | null;
   availabilities: DaySchedule[];
   services?: ServiceItem[];
   staffMembers?: StaffMemberItem[];
@@ -109,6 +111,8 @@ interface BookingItem {
   status: string;
   paymentStatus: string;
   depositAmount: number | null;
+  managementCode?: string | null;
+  cancellationToken?: string | null;
   staffMember?: {
     id: string;
     name: string;
@@ -224,6 +228,7 @@ export default function TenantDashboard() {
   const [instagram, setInstagram] = useState("");
   const [timezone, setTimezone] = useState("America/Argentina/Buenos_Aires");
   const [slotDuration, setSlotDuration] = useState(30);
+  const [cancelNoticeHours, setCancelNoticeHours] = useState(0);
 
   // Form state for 7-day schedule
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
@@ -278,6 +283,7 @@ export default function TenantDashboard() {
           setBankCbu(p.bankCbu || "");
           setBankHolder(p.bankHolder || "");
           setDepositNotes(p.depositNotes || "");
+          setCancelNoticeHours(p.cancelNoticeHours ?? 0);
 
           const fullWeek: DaySchedule[] = [];
           for (let day = 0; day <= 6; day++) {
@@ -1266,9 +1272,16 @@ export default function TenantDashboard() {
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-mono font-medium text-white bg-zinc-800 px-2.5 py-0.5 rounded-md">
-                          {b.startTime} - {b.endTime} hs
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-medium text-white bg-zinc-800 px-2.5 py-0.5 rounded-md">
+                            {b.startTime} - {b.endTime} hs
+                          </span>
+                          {b.managementCode && (
+                            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
+                              {b.managementCode}
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
                             b.status === "CONFIRMED"
@@ -2780,7 +2793,7 @@ export default function TenantDashboard() {
 
                   <button
                     onClick={async () => {
-                      await handleSaveProfile({ timezone, slotDuration });
+                      await handleSaveProfile({ timezone, slotDuration, cancelNoticeHours: Number(cancelNoticeHours) });
                       await handleSaveAvailability();
                     }}
                     disabled={saving}
@@ -2884,6 +2897,56 @@ export default function TenantDashboard() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* CANCELLATION & RESCHEDULING NOTICE POLICY CARD */}
+            <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-emerald-400" />
+                    <span>Cancelación & Reprogramación con 1 Clic</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                    Tus clientes reciben un código y enlace directo para cancelar o reprogramar su turno online. Definí con cuánta antelación permitís que lo hagan.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveProfile({ cancelNoticeHours: Number(cancelNoticeHours) })}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50 shrink-0 cursor-pointer"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Guardar Política</span>
+                </button>
+              </div>
+
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-white mb-0.5">
+                    Antelación mínima requerida:
+                  </label>
+                  <p className="text-[11px] text-zinc-400 font-light max-w-lg leading-relaxed">
+                    Si el cliente intenta cancelar o reprogramar cuando falte menos que este tiempo, la acción se bloqueará y se le indicará que se comunique directamente por WhatsApp con el local.
+                  </p>
+                </div>
+
+                <select
+                  value={cancelNoticeHours}
+                  onChange={(e) => setCancelNoticeHours(Number(e.target.value))}
+                  className="px-3 py-2 rounded-xl minimal-input text-xs text-white min-w-[260px]"
+                >
+                  <option value={0}>Sin límite (en cualquier momento hasta la hora del turno)</option>
+                  <option value={2}>Hasta 2 horas antes del turno</option>
+                  <option value={4}>Hasta 4 horas antes del turno</option>
+                  <option value={6}>Hasta 6 horas antes del turno</option>
+                  <option value={12}>Hasta 12 horas antes del turno</option>
+                  <option value={24}>Hasta 24 horas antes del turno (1 día)</option>
+                  <option value={48}>Hasta 48 horas antes del turno (2 días)</option>
+                </select>
               </div>
             </div>
           </div>

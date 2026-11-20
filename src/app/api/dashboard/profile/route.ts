@@ -71,6 +71,7 @@ export async function PUT(req: Request) {
       bankCbu,
       bankHolder,
       depositNotes,
+      cancelNoticeHours,
     } = body;
 
     const cleanSlug =
@@ -139,6 +140,9 @@ export async function PUT(req: Request) {
         ...(bankCbu !== undefined && { bankCbu: bankCbu ? bankCbu.trim() : null }),
         ...(bankHolder !== undefined && { bankHolder: bankHolder ? bankHolder.trim() : null }),
         ...(depositNotes !== undefined && { depositNotes: depositNotes ? depositNotes.trim() : null }),
+        ...(cancelNoticeHours !== undefined && {
+          cancelNoticeHours: Math.max(0, Math.round(Number(cancelNoticeHours) || 0)),
+        }),
       },
     });
 

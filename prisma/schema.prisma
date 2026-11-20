@@ -64,6 +64,9 @@ model Profile {
   bankHolder      String?  // e.g. "Lucas Gómez - Mercado Pago / Banco Galicia"
   depositNotes    String?  // Custom instructions for the client
 
+  // Cancellation and rescheduling policy
+  cancelNoticeHours  Int      @default(0) // Minimum hours in advance to cancel or reschedule (0 = any time)
+
   availabilities Availability[]
   services       Service[]
   staffMembers   StaffMember[]
@@ -145,9 +148,12 @@ model Booking {
   status          String       @default("CONFIRMED") // "CONFIRMED" | "CANCELLED" | "COMPLETED"
   paymentStatus   String       @default("EXEMPT") // "PENDING" | "PAID" | "EXEMPT"
   depositAmount   Int?         // Snapshot of required deposit amount in ARS
+  managementCode  String?      // Readable code (e.g. "MK-4892")
+  cancellationToken String?    @unique // Secure token for 1-click management link
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   @@index([profileId, date])
   @@index([profileId, staffMemberId, date])
+  @@index([managementCode])
 }

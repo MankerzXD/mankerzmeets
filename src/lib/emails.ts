@@ -108,6 +108,9 @@ export async function sendBookingNotificationEmails({
   customerPhone,
   notes,
   whatsappUrl,
+  managementCode,
+  manageUrl,
+  cancelNoticeHours,
 }: {
   ownerEmail: string;
   profileName: string;
@@ -125,6 +128,9 @@ export async function sendBookingNotificationEmails({
   customerPhone: string;
   notes?: string | null;
   whatsappUrl: string | null;
+  managementCode?: string | null;
+  manageUrl?: string | null;
+  cancelNoticeHours?: number;
 }): Promise<{ ownerSent: boolean; customerSent: boolean; staffSent?: boolean }> {
   const { resend, from, appUrl } = getResendConfig();
 
@@ -256,6 +262,14 @@ export async function sendBookingNotificationEmails({
             </div>`
           : ""
       }
+      ${
+        managementCode
+          ? `<div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 16px;">
+              <span style="font-size: 10px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px;">Código de turno</span>
+              <span style="font-family: monospace; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: 2px;">${escapeHtml(managementCode)}</span>
+            </div>`
+          : ""
+      }
       ${summaryRows(customerRows)}
       <div style="text-align: center;">
         <a href="${googleCalUrl}" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px; margin-bottom: 10px;">Agregar a Google Calendar</a>
@@ -265,6 +279,22 @@ export async function sendBookingNotificationEmails({
             : ""
         }
       </div>
+      ${
+        manageUrl
+          ? `<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #27272a; text-align: center;">
+              <p style="font-size: 12px; color: #a1a1aa; margin: 0 0 10px;">
+                ${
+                  cancelNoticeHours && cancelNoticeHours > 0
+                    ? `¿No podés asistir? Podés cancelar o reprogramar tu turno online hasta <strong>${cancelNoticeHours} hs</strong> antes.`
+                    : "¿No podés asistir? Podés cancelar o reprogramar tu turno con 1 clic en cualquier momento."
+                }
+              </p>
+              <a href="${manageUrl}" style="display: inline-block; background-color: #18181b; color: #f43f5e; border: 1px solid #3f3f46; text-decoration: none; font-size: 12px; font-weight: 600; padding: 10px 18px; border-radius: 10px;">
+                ¿No podés asistir? Cancelá o reprogramá acá
+              </a>
+            </div>`
+          : ""
+      }
     `,
     footerText: `Mankerz Meet • ${appUrl}/${profileSlug}`,
   });
@@ -349,5 +379,321 @@ export async function sendBookingNotificationEmails({
     customerSent: results.find((r) => r.role === "customer")?.ok ?? false,
     staffSent: results.find((r) => r.role === "staff")?.ok ?? undefined,
   };
+}
+
+export async function sendBookingCancelledEmails({
+  ownerEmail,
+  customerEmail,
+  staffMemberEmail,
+  profileName,
+  profileSlug,
+  customerName,
+  serviceName,
+  staffMemberName,
+  formattedDate,
+  startTime,
+  endTime,
+}: {
+  ownerEmail: string;
+  customerEmail?: string | null;
+  staffMemberEmail?: string | null;
+  profileName: string;
+  profileSlug: string;
+  customerName: string;
+  serviceName?: string | null;
+  staffMemberName?: string | null;
+  formattedDate: string;
+  startTime: string;
+  endTime: string;
+}): Promise<{ ownerSent: boolean; customerSent: boolean }> {
+  const { resend, from, appUrl } = getResendConfig();
+
+  const detailsHtml = `
+    <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; margin-bottom: 18px; font-size: 13px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+        <span style="color: #71717a;">Cliente:</span>
+        <span style="color: #fafafa; font-weight: 600;">${escapeHtml(customerName)}</span>
+      </div>
+      ${serviceName ? `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+          <span style="color: #71717a;">Servicio:</span>
+          <span style="color: #fafafa; font-weight: 600;">${escapeHtml(serviceName)}</span>
+        </div>` : ""}
+      ${staffMemberName ? `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+          <span style="color: #71717a;">Profesional:</span>
+          <span style="color: #fafafa; font-weight: 600;">${escapeHtml(staffMemberName)}</span>
+        </div>` : ""}
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+        <span style="color: #71717a;">Fecha liberada:</span>
+        <span style="color: #fafafa; font-weight: 600;">${escapeHtml(formattedDate)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; border-top: 1px solid #18181b; padding-top: 8px;">
+        <span style="color: #71717a;">Horario liberado:</span>
+        <span style="color: #fafafa; font-weight: 600;">${escapeHtml(startTime)} a ${escapeHtml(endTime)} hs</span>
+      </div>
+    </div>
+  `;
+
+  // 1. Owner notification email
+  const ownerHtml = renderEmailShell({
+    title: "Turno cancelado por el cliente",
+    subtitle: `${customerName} canceló su turno. El horario ha quedado liberado automáticamente.`,
+    bodyHtml: `
+      ${detailsHtml}
+      <div style="text-align: center;">
+        <a href="${appUrl}/dashboard" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px;">
+          Ver calendario en el panel
+        </a>
+      </div>
+    `,
+    footerText: "Notificación de cancelación de Mankerz Meet.",
+  });
+
+  const tasks: Array<Promise<boolean>> = [];
+
+  tasks.push(
+    resend.emails
+      .send({
+        from,
+        to: [ownerEmail],
+        subject: `Turno cancelado: ${customerName} — ${formattedDate} (${startTime} hs)`,
+        html: ownerHtml,
+        text: `El cliente ${customerName} canceló su turno programado para el ${formattedDate} de ${startTime} a ${endTime} hs. El horario ha sido liberado automáticamente en tu agenda.`,
+      })
+      .then(({ error }) => !error)
+      .catch(() => false)
+  );
+
+  // If staff member has email and is distinct from owner, notify them too
+  if (
+    staffMemberEmail &&
+    staffMemberEmail.includes("@") &&
+    staffMemberEmail.toLowerCase().trim() !== ownerEmail.toLowerCase().trim()
+  ) {
+    tasks.push(
+      resend.emails
+        .send({
+          from,
+          to: [staffMemberEmail],
+          subject: `Turno cancelado: ${customerName} — ${formattedDate} (${startTime} hs)`,
+          html: ownerHtml,
+          text: `El cliente ${customerName} canceló su turno programado para el ${formattedDate} de ${startTime} a ${endTime} hs. El horario ha sido liberado en tu agenda.`,
+        })
+        .then(({ error }) => !error)
+        .catch(() => false)
+    );
+  }
+
+  // 2. Customer confirmation email
+  let customerTask = Promise.resolve(false);
+  if (customerEmail && customerEmail.includes("@")) {
+    const customerHtml = renderEmailShell({
+      title: "Tu turno ha sido cancelado",
+      subtitle: `Cancelaste tu turno con ${profileName}.`,
+      bodyHtml: `
+        ${detailsHtml}
+        <div style="text-align: center;">
+          <p style="font-size: 12px; color: #a1a1aa; margin-bottom: 12px;">
+            El horario quedó disponible. Podés volver a agendar en cualquier momento cuando desees.
+          </p>
+          <a href="${appUrl}/${profileSlug}" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px;">
+            Reservar un nuevo turno
+          </a>
+        </div>
+      `,
+      footerText: `Mankerz Meet • ${appUrl}/${profileSlug}`,
+    });
+
+    customerTask = resend.emails
+      .send({
+        from,
+        to: [customerEmail],
+        subject: `Turno cancelado con éxito — ${profileName}`,
+        html: customerHtml,
+        text: `Tu turno con ${profileName} para el ${formattedDate} (${startTime} hs) ha sido cancelado exitosamente.`,
+      })
+      .then(({ error }) => !error)
+      .catch(() => false);
+  }
+
+  const [ownerOk, customerOk] = await Promise.all([tasks[0], customerTask]);
+  return { ownerSent: Boolean(ownerOk), customerSent: Boolean(customerOk) };
+}
+
+export async function sendBookingRescheduledEmails({
+  ownerEmail,
+  customerEmail,
+  staffMemberEmail,
+  profileName,
+  profileSlug,
+  customerName,
+  customerPhone,
+  serviceName,
+  staffMemberName,
+  oldFormattedDate,
+  oldStartTime,
+  newFormattedDate,
+  newDate,
+  newStartTime,
+  newEndTime,
+  manageUrl,
+  managementCode,
+}: {
+  ownerEmail: string;
+  customerEmail?: string | null;
+  staffMemberEmail?: string | null;
+  profileName: string;
+  profileSlug: string;
+  customerName: string;
+  customerPhone?: string | null;
+  serviceName?: string | null;
+  staffMemberName?: string | null;
+  oldFormattedDate: string;
+  oldStartTime: string;
+  newFormattedDate: string;
+  newDate: string;
+  newStartTime: string;
+  newEndTime: string;
+  manageUrl?: string | null;
+  managementCode?: string | null;
+}): Promise<{ ownerSent: boolean; customerSent: boolean }> {
+  const { resend, from, appUrl } = getResendConfig();
+
+  const startClean = `${newDate.replace(/-/g, "")}T${newStartTime.replace(/:/g, "")}00`;
+  const endClean = `${newDate.replace(/-/g, "")}T${newEndTime.replace(/:/g, "")}00`;
+  const calendarTitle = serviceName
+    ? `${serviceName} — ${profileName}`
+    : `Turno con ${profileName}`;
+  const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+    calendarTitle
+  )}&dates=${startClean}/${endClean}&details=${encodeURIComponent(
+    `Turno agendado en ${appUrl}/${profileSlug}`
+  )}`;
+
+  const summaryHtml = `
+    <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; margin-bottom: 18px; font-size: 13px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+        <span style="color: #71717a;">Cliente:</span>
+        <span style="color: #fafafa; font-weight: 600;">${escapeHtml(customerName)}</span>
+      </div>
+      ${serviceName ? `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+          <span style="color: #71717a;">Servicio:</span>
+          <span style="color: #fafafa; font-weight: 600;">${escapeHtml(serviceName)}</span>
+        </div>` : ""}
+      ${staffMemberName ? `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+          <span style="color: #71717a;">Profesional:</span>
+          <span style="color: #fafafa; font-weight: 600;">${escapeHtml(staffMemberName)}</span>
+        </div>` : ""}
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-top: 1px solid #18181b; padding-top: 8px;">
+        <span style="color: #71717a;">Horario anterior:</span>
+        <span style="color: #ef4444; text-decoration: line-through;">${escapeHtml(oldFormattedDate)} (${escapeHtml(oldStartTime)} hs)</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; border-top: 1px solid #18181b; padding-top: 8px;">
+        <span style="color: #10b981; font-weight: 600;">Nuevo horario:</span>
+        <span style="color: #10b981; font-weight: 700;">${escapeHtml(newFormattedDate)} de ${escapeHtml(newStartTime)} a ${escapeHtml(newEndTime)} hs</span>
+      </div>
+    </div>
+  `;
+
+  // 1. Owner notification
+  const ownerHtml = renderEmailShell({
+    title: "Turno reprogramado por el cliente",
+    subtitle: `${customerName} cambió la fecha u hora de su turno.`,
+    bodyHtml: `
+      ${summaryHtml}
+      <div style="text-align: center;">
+        <a href="${appUrl}/dashboard" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px;">
+          Ver cambios en el panel
+        </a>
+      </div>
+    `,
+    footerText: "Notificación de reprogramación de Mankerz Meet.",
+  });
+
+  const tasks: Array<Promise<boolean>> = [];
+
+  tasks.push(
+    resend.emails
+      .send({
+        from,
+        to: [ownerEmail],
+        subject: `Turno reprogramado: ${customerName} — ${newFormattedDate} (${newStartTime} hs)`,
+        html: ownerHtml,
+        text: `El cliente ${customerName} reprogramó su turno del ${oldFormattedDate} al ${newFormattedDate} (${newStartTime} a ${newEndTime} hs).`,
+      })
+      .then(({ error }) => !error)
+      .catch(() => false)
+  );
+
+  if (
+    staffMemberEmail &&
+    staffMemberEmail.includes("@") &&
+    staffMemberEmail.toLowerCase().trim() !== ownerEmail.toLowerCase().trim()
+  ) {
+    tasks.push(
+      resend.emails
+        .send({
+          from,
+          to: [staffMemberEmail],
+          subject: `Turno reprogramado: ${customerName} — ${newFormattedDate} (${newStartTime} hs)`,
+          html: ownerHtml,
+          text: `El cliente ${customerName} reprogramó su turno del ${oldFormattedDate} al ${newFormattedDate} (${newStartTime} a ${newEndTime} hs).`,
+        })
+        .then(({ error }) => !error)
+        .catch(() => false)
+    );
+  }
+
+  // 2. Customer confirmation
+  let customerTask = Promise.resolve(false);
+  if (customerEmail && customerEmail.includes("@")) {
+    const customerHtml = renderEmailShell({
+      title: "¡Tu turno ha sido reprogramado!",
+      subtitle: `Actualizamos con éxito tu reserva con ${profileName}.`,
+      bodyHtml: `
+        ${
+          managementCode
+            ? `<div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 16px;">
+                <span style="font-size: 10px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px;">Código de turno</span>
+                <span style="font-family: monospace; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: 2px;">${escapeHtml(managementCode)}</span>
+              </div>`
+            : ""
+        }
+        ${summaryHtml}
+        <div style="text-align: center;">
+          <a href="${googleCalUrl}" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px; margin-bottom: 10px;">
+            Actualizar Google Calendar
+          </a>
+          ${
+            manageUrl
+              ? `<div style="margin-top: 14px;">
+                  <a href="${manageUrl}" style="color: #a1a1aa; font-size: 12px; text-decoration: underline;">
+                    Ver o gestionar este turno
+                  </a>
+                </div>`
+              : ""
+          }
+        </div>
+      `,
+      footerText: `Mankerz Meet • ${appUrl}/${profileSlug}`,
+    });
+
+    customerTask = resend.emails
+      .send({
+        from,
+        to: [customerEmail],
+        subject: `Turno reprogramado con éxito — ${profileName} (${newFormattedDate})`,
+        html: customerHtml,
+        text: `Tu turno con ${profileName} fue reprogramado para el ${newFormattedDate} de ${newStartTime} a ${newEndTime} hs.`,
+      })
+      .then(({ error }) => !error)
+      .catch(() => false);
+  }
+
+  const [ownerOk, customerOk] = await Promise.all([tasks[0], customerTask]);
+  return { ownerSent: Boolean(ownerOk), customerSent: Boolean(customerOk) };
 }
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatDateSpanish } from "@/lib/utils";
 import { generateAvailableSlots } from "@/lib/time-slots";
 import { sendBookingNotificationEmails } from "@/lib/emails";
+import { generateBookingCode, generateBookingToken } from "@/lib/booking-code";
 
 export async function POST(
   req: Request,
@@ -230,6 +231,9 @@ export async function POST(
         }
       }
 
+      const managementCode = generateBookingCode();
+      const cancellationToken = generateBookingToken();
+
       const booking = await tx.booking.create({
         data: {
           profileId: profile.id,
@@ -248,6 +252,8 @@ export async function POST(
           status: "CONFIRMED",
           paymentStatus: initialPaymentStatus,
           depositAmount: calculatedDepositAmount,
+          managementCode,
+          cancellationToken,
         },
       });
 
@@ -263,6 +269,11 @@ export async function POST(
         { status: 409 }
       );
     }
+
+    const appUrl = (
+      process.env.NEXT_PUBLIC_APP_URL || "https://meet.mankerz.xyz"
+    ).replace(/\/+$/, "");
+    const manageUrl = `${appUrl}/${profile.slug}/turno/${result.booking.cancellationToken}`;
 
     const formattedDate = formatDateSpanish(date);
     const professionalPhone = profile.whatsapp.replace(/[^\d]/g, "");
@@ -280,7 +291,7 @@ export async function POST(
         : "";
 
     const waText = encodeURIComponent(
-      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}${staffLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${depositLine}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
+      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}${staffLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${depositLine}${notes ? `\n📝 *Nota:* ${notes}` : ""}\n🔖 *Código:* ${result.booking.managementCode || ""}`
     );
 
     const whatsappUrl =
@@ -317,11 +328,17 @@ export async function POST(
       customerPhone: customerPhone.trim(),
       notes: notes ? notes.trim() : null,
       whatsappUrl,
+      managementCode: result.booking.managementCode,
+      manageUrl,
+      cancelNoticeHours: profile.cancelNoticeHours,
     });
 
     return NextResponse.json({
       success: true,
       booking: result.booking,
+      managementCode: result.booking.managementCode,
+      cancellationToken: result.booking.cancellationToken,
+      manageUrl,
       depositInfo,
       whatsappUrl,
       emailStatus,

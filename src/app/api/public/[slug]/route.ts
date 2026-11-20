@@ -37,6 +37,7 @@ export async function GET(
         bankCbu: true,
         bankHolder: true,
         depositNotes: true,
+        cancelNoticeHours: true,
         availabilities: {
           select: {
             dayOfWeek: true,
