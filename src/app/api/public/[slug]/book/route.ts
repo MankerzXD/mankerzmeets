@@ -213,6 +213,10 @@ export async function POST(
         assignedStaff = candidateStaff[0];
       }
 
+      const isDepositRequired =
+        profile.depositRequired && Boolean(profile.bankAlias || profile.bankCbu);
+      const initialPaymentStatus = isDepositRequired ? "PENDING" : "EXEMPT";
+
       const booking = await tx.booking.create({
         data: {
           profileId: profile.id,
@@ -228,10 +232,12 @@ export async function POST(
           endTime,
           notes: (notes || "").trim(),
           status: "CONFIRMED",
+          paymentStatus: initialPaymentStatus,
+          depositAmount: isDepositRequired ? profile.depositAmount : null,
         },
       });
 
-      return { conflict: false as const, booking, assignedStaff };
+      return { conflict: false as const, booking, assignedStaff, isDepositRequired };
     });
 
     if (result.conflict) {
@@ -252,14 +258,32 @@ export async function POST(
     const staffLine = result.assignedStaff
       ? `\n💈 *Profesional:* ${result.assignedStaff.name}`
       : "";
+    const depositLine =
+      result.isDepositRequired && profile.depositAmount
+        ? `\n💳 *Seña bancaria ($${profile.depositAmount.toLocaleString("es-AR")}):* Te adjunto el comprobante de transferencia a continuación.`
+        : result.isDepositRequired
+        ? `\n💳 *Seña bancaria:* Te adjunto el comprobante de transferencia a continuación.`
+        : "";
+
     const waText = encodeURIComponent(
-      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}${staffLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
+      `¡Hola ${profile.name}!\n\nAcabo de agendar un turno a través de *Mankerz Meet*:${serviceLine}${staffLine}\n📅 *Fecha:* ${formattedDate}\n⏰ *Horario:* ${startTime} a ${endTime} hs\n👤 *Nombre:* ${customerName}\n📱 *Teléfono:* ${customerPhone}${depositLine}${notes ? `\n📝 *Nota:* ${notes}` : ""}`
     );
 
     const whatsappUrl =
       professionalPhone.length >= 8
         ? `https://wa.me/${professionalPhone}?text=${waText}`
         : null;
+
+    const depositInfo = result.isDepositRequired
+      ? {
+          required: true,
+          amount: profile.depositAmount,
+          alias: profile.bankAlias,
+          cbu: profile.bankCbu,
+          holder: profile.bankHolder,
+          notes: profile.depositNotes,
+        }
+      : null;
 
     const emailStatus = await sendBookingNotificationEmails({
       ownerEmail: profile.user.email,
@@ -268,6 +292,7 @@ export async function POST(
       serviceName: selectedService ? selectedService.name : null,
       staffMemberName: result.assignedStaff ? result.assignedStaff.name : null,
       staffMemberEmail: result.assignedStaff?.email || null,
+      depositInfo,
       formattedDate,
       date,
       startTime,
@@ -282,9 +307,12 @@ export async function POST(
     return NextResponse.json({
       success: true,
       booking: result.booking,
+      depositInfo,
       whatsappUrl,
       emailStatus,
-      message: "¡Turno agendado con éxito!",
+      message: result.isDepositRequired
+        ? "¡Turno pre-agendado! Por favor transferí la seña para asegurar tu lugar."
+        : "¡Turno agendado con éxito!",
     });
   } catch (error) {
     console.error("Error creating booking:", error);

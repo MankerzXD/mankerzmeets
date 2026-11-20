@@ -49,9 +49,9 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Perfil no encontrado" }, { status: 404 });
     }
 
-    const { bookingId, status } = await req.json();
+    const { bookingId, status, paymentStatus } = await req.json();
 
-    if (!bookingId || !status) {
+    if (!bookingId || (!status && !paymentStatus)) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
     }
 
@@ -66,9 +66,13 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Turno no encontrado" }, { status: 404 });
     }
 
+    const updateData: { status?: string; paymentStatus?: string } = {};
+    if (status) updateData.status = status;
+    if (paymentStatus) updateData.paymentStatus = paymentStatus;
+
     const updated = await prisma.booking.update({
       where: { id: bookingId },
-      data: { status },
+      data: updateData,
     });
 
     return NextResponse.json({ success: true, booking: updated });

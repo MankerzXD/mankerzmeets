@@ -30,6 +30,12 @@ export async function GET(
         timezone: true,
         status: true,
         slotDuration: true,
+        depositRequired: true,
+        depositAmount: true,
+        bankAlias: true,
+        bankCbu: true,
+        bankHolder: true,
+        depositNotes: true,
         availabilities: {
           select: {
             dayOfWeek: true,

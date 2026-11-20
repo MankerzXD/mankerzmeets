@@ -55,6 +55,14 @@ model Profile {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Bank transfer deposit settings to prevent no-shows
+  depositRequired Boolean  @default(false)
+  depositAmount   Int?     // Fixed deposit amount in ARS (e.g. 3000)
+  bankAlias       String?  // e.g. "barberia.flow.mp"
+  bankCbu         String?  // 22-digit CBU or CVU
+  bankHolder      String?  // e.g. "Lucas Gómez - Mercado Pago / Banco Galicia"
+  depositNotes    String?  // Custom instructions for the client
+
   availabilities Availability[]
   services       Service[]
   staffMembers   StaffMember[]
@@ -132,6 +140,8 @@ model Booking {
   endTime         String       // "10:30"
   notes           String?
   status          String       @default("CONFIRMED") // "CONFIRMED" | "CANCELLED" | "COMPLETED"
+  paymentStatus   String       @default("EXEMPT") // "PENDING" | "PAID" | "EXEMPT"
+  depositAmount   Int?         // Snapshot of required deposit amount in ARS
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 

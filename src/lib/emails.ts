@@ -82,6 +82,15 @@ export async function sendOtpEmail(email: string, code: string): Promise<void> {
   }
 }
 
+export interface DepositEmailInfo {
+  required: boolean;
+  amount?: number | null;
+  alias?: string | null;
+  cbu?: string | null;
+  holder?: string | null;
+  notes?: string | null;
+}
+
 export async function sendBookingNotificationEmails({
   ownerEmail,
   profileName,
@@ -89,6 +98,7 @@ export async function sendBookingNotificationEmails({
   serviceName,
   staffMemberName,
   staffMemberEmail,
+  depositInfo,
   formattedDate,
   date,
   startTime,
@@ -105,6 +115,7 @@ export async function sendBookingNotificationEmails({
   serviceName?: string | null;
   staffMemberName?: string | null;
   staffMemberEmail?: string | null;
+  depositInfo?: DepositEmailInfo | null;
   formattedDate: string;
   date: string;
   startTime: string;
@@ -163,13 +174,30 @@ export async function sendBookingNotificationEmails({
     ["WhatsApp", customerPhone],
     ["Email", customerEmail]
   );
+  if (depositInfo?.required) {
+    ownerRows.push([
+      "Seña bancaria",
+      depositInfo.amount ? `$${depositInfo.amount.toLocaleString("es-AR")} (Pendiente de comprobante)` : "Requerida",
+    ]);
+  }
   if (notes) ownerRows.push(["Nota", notes]);
 
+  const ownerSubtitle = depositInfo?.required
+    ? `${customerName} agendó un turno (Pendiente de verificar comprobante de seña).`
+    : `${customerName} reservó un turno en tu perfil (${profileName}).`;
+
   const ownerHtml = renderEmailShell({
-    title: "Nuevo turno agendado",
-    subtitle: `${customerName} reservó un turno en tu perfil (${profileName}).`,
+    title: depositInfo?.required ? "Nuevo turno (Seña Pendiente)" : "Nuevo turno agendado",
+    subtitle: ownerSubtitle,
     bodyHtml: `
       ${summaryRows(ownerRows)}
+      ${
+        depositInfo?.required
+          ? `<div style="background-color: #1c1917; border: 1px solid #78350f; border-radius: 12px; padding: 14px; margin-bottom: 18px; font-size: 12px; color: #fde68a;">
+              ⚠️ <strong>Atención:</strong> Este turno requiere una seña previa de <strong>$${depositInfo.amount ? depositInfo.amount.toLocaleString("es-AR") : ""}</strong>. Verificá la acreditación en tu cuenta bancaria y el comprobante del cliente antes de confirmar.
+            </div>`
+          : ""
+      }
       <div style="text-align: center;">
         ${
           customerWaUrl
@@ -192,18 +220,48 @@ export async function sendBookingNotificationEmails({
     ["Fecha", formattedDate],
     ["Horario", `${startTime} a ${endTime} hs`]
   );
+  if (depositInfo?.required) {
+    if (depositInfo.amount) {
+      customerRows.push(["Seña a transferir", `$${depositInfo.amount.toLocaleString("es-AR")}`]);
+    }
+    if (depositInfo.alias) {
+      customerRows.push(["Alias bancario", depositInfo.alias]);
+    }
+    if (depositInfo.holder) {
+      customerRows.push(["Titular de la cuenta", depositInfo.holder]);
+    }
+    if (depositInfo.cbu) {
+      customerRows.push(["CBU / CVU", depositInfo.cbu]);
+    }
+  }
   if (notes) customerRows.push(["Tu nota", notes]);
 
+  const customerTitle = depositInfo?.required
+    ? "¡Turno pre-reservado!"
+    : "¡Turno confirmado!";
+  const customerSubtitle = depositInfo?.required
+    ? `Tu turno con ${profileName} está pre-agendado. Transferí la seña para asegurar tu lugar.`
+    : `Tu reserva con ${profileName} quedó agendada.`;
+
   const customerHtml = renderEmailShell({
-    title: "¡Turno confirmado!",
-    subtitle: `Tu reserva con ${profileName} quedó agendada.`,
+    title: customerTitle,
+    subtitle: customerSubtitle,
     bodyHtml: `
+      ${
+        depositInfo?.required
+          ? `<div style="background-color: #18181b; border: 1px solid #d97706; border-radius: 12px; padding: 16px; margin-bottom: 18px; font-size: 13px; color: #fef3c7;">
+              <strong>⚠️ Instrucciones para asegurar tu turno:</strong><br/>
+              Transferí la seña de <strong>$${depositInfo.amount ? depositInfo.amount.toLocaleString("es-AR") : ""}</strong> al Alias <strong>${escapeHtml(depositInfo.alias || "")}</strong> y enviá el comprobante por WhatsApp para confirmar tu asistencia.
+              ${depositInfo.notes ? `<br/><span style="font-size: 12px; color: #d4d4d8; display: block; margin-top: 6px;">"${escapeHtml(depositInfo.notes)}"</span>` : ""}
+            </div>`
+          : ""
+      }
       ${summaryRows(customerRows)}
       <div style="text-align: center;">
         <a href="${googleCalUrl}" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px; margin-bottom: 10px;">Agregar a Google Calendar</a>
         ${
           whatsappUrl
-            ? `<br/><a href="${whatsappUrl}" style="display: inline-block; color: #a1a1aa; text-decoration: underline; font-size: 12px; margin-top: 6px;">Contactar por WhatsApp</a>`
+            ? `<br/><a href="${whatsappUrl}" style="display: inline-block; color: #a1a1aa; text-decoration: underline; font-size: 12px; margin-top: 6px;">Enviar comprobante por WhatsApp</a>`
             : ""
         }
       </div>

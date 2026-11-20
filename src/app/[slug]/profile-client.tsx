@@ -18,6 +18,8 @@ import {
   ArrowRight,
   CalendarCheck,
   MessageCircle,
+  Copy,
+  CreditCard,
 } from "lucide-react";
 import { InstagramIcon } from "@/components/icons";
 import { formatDateSpanish } from "@/lib/utils";
@@ -58,6 +60,12 @@ interface PublicProfile {
   timezone?: string;
   status: string;
   slotDuration: number;
+  depositRequired?: boolean;
+  depositAmount?: number | null;
+  bankAlias?: string | null;
+  bankCbu?: string | null;
+  bankHolder?: string | null;
+  depositNotes?: string | null;
   availabilities: PublicAvailability[];
   services?: PublicService[];
   staffMembers?: PublicStaffMember[];
@@ -111,10 +119,19 @@ export default function ProfileClient({ slug }: { slug: string }) {
       staffMemberName?: string | null;
     };
     whatsappUrl: string | null;
+    depositInfo?: {
+      required: boolean;
+      amount: number | null;
+      alias: string | null;
+      cbu: string | null;
+      holder: string | null;
+      notes: string | null;
+    } | null;
   } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedAlias, setCopiedAlias] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -257,6 +274,12 @@ export default function ProfileClient({ slug }: { slug: string }) {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleCopyAlias = (alias: string) => {
+    navigator.clipboard.writeText(alias);
+    setCopiedAlias(true);
+    setTimeout(() => setCopiedAlias(false), 2000);
+  };
+
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDateStr || !selectedSlot) return;
@@ -294,6 +317,7 @@ export default function ProfileClient({ slug }: { slug: string }) {
       setBookingResult({
         booking: data.booking,
         whatsappUrl: data.whatsappUrl,
+        depositInfo: data.depositInfo,
       });
     } catch (err: unknown) {
       setBookingError(
@@ -569,6 +593,63 @@ export default function ProfileClient({ slug }: { slug: string }) {
                 </div>
               </div>
 
+              {/* DEPOSIT TRANSFER DETAILS */}
+              {bookingResult.depositInfo?.required && (
+                <div className="mt-4 p-4 rounded-xl border border-amber-900/50 bg-amber-950/20 text-left space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs">
+                    <CreditCard className="w-4 h-4 shrink-0" />
+                    <span>
+                      Paso importante: Seña requerida
+                      {bookingResult.depositInfo.amount
+                        ? ` ($${bookingResult.depositInfo.amount.toLocaleString("es-AR")})`
+                        : ""}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-200/90 leading-relaxed font-light">
+                    Para confirmar definitivamente tu turno, transferí la seña y adjuntá el comprobante al enviarle un mensaje por WhatsApp:
+                  </p>
+
+                  {bookingResult.depositInfo.alias && (
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-amber-900/40">
+                      <div>
+                        <span className="block text-[10px] text-zinc-400 uppercase tracking-wide">Alias</span>
+                        <span className="text-xs font-mono font-bold text-white selection:bg-amber-500">
+                          {bookingResult.depositInfo.alias}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAlias(bookingResult.depositInfo!.alias!)}
+                        className="px-2.5 py-1 rounded-md bg-amber-400 text-zinc-950 hover:bg-amber-300 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedAlias ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedAlias ? "Copiado" : "Copiar"}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {bookingResult.depositInfo.holder && (
+                    <div className="text-[11px] text-zinc-300 flex justify-between">
+                      <span className="text-zinc-500">Titular:</span>
+                      <span className="font-medium text-white">{bookingResult.depositInfo.holder}</span>
+                    </div>
+                  )}
+
+                  {bookingResult.depositInfo.cbu && (
+                    <div className="text-[11px] text-zinc-300 flex justify-between font-mono">
+                      <span className="text-zinc-500">CBU / CVU:</span>
+                      <span className="text-zinc-200">{bookingResult.depositInfo.cbu}</span>
+                    </div>
+                  )}
+
+                  {bookingResult.depositInfo.notes && (
+                    <p className="text-[11px] text-zinc-400 italic pt-1 border-t border-amber-900/30">
+                      &ldquo;{bookingResult.depositInfo.notes}&rdquo;
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="mt-5 space-y-2">
                 {bookingResult.whatsappUrl && (
                   <a
@@ -578,7 +659,11 @@ export default function ProfileClient({ slug }: { slug: string }) {
                     className={`w-full py-3 px-4 rounded-xl font-medium text-xs transition flex items-center justify-center gap-2 ${theme.primaryBtn}`}
                   >
                     <MessageCircle className="w-4 h-4" />
-                    <span>Avisar por WhatsApp</span>
+                    <span>
+                      {bookingResult.depositInfo?.required
+                        ? "Enviar comprobante por WhatsApp"
+                        : "Avisar por WhatsApp"}
+                    </span>
                   </a>
                 )}
 
@@ -1013,6 +1098,17 @@ export default function ProfileClient({ slug }: { slug: string }) {
                       className={`w-full px-3 py-2 rounded-xl text-xs ${theme.inputCls}`}
                     />
                   </div>
+
+                  {/* DEPOSIT NOTICE */}
+                  {profile.depositRequired && (profile.bankAlias || profile.bankCbu) && (
+                    <div className="p-3 rounded-xl border border-amber-900/40 bg-amber-950/20 text-left text-xs text-amber-200 flex items-start gap-2">
+                      <CreditCard className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <strong className="text-amber-300 font-semibold block">Seña requerida para este turno</strong>
+                        Se solicitará una seña {profile.depositAmount ? `de $${profile.depositAmount.toLocaleString("es-AR")}` : ""} por transferencia bancaria. Al confirmar verás el Alias para transferir y enviar el comprobante.
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="submit"

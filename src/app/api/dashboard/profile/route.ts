@@ -64,6 +64,12 @@ export async function PUT(req: Request) {
       timezone,
       slotDuration,
       slug,
+      depositRequired,
+      depositAmount,
+      bankAlias,
+      bankCbu,
+      bankHolder,
+      depositNotes,
     } = body;
 
     const cleanSlug =
@@ -118,6 +124,14 @@ export async function PUT(req: Request) {
         ...(timezone !== undefined && { timezone }),
         ...(slotDuration !== undefined && { slotDuration: Number(slotDuration) }),
         ...(cleanSlug && { slug: cleanSlug }),
+        ...(depositRequired !== undefined && { depositRequired: Boolean(depositRequired) }),
+        ...(depositAmount !== undefined && {
+          depositAmount: depositAmount !== null && depositAmount !== "" ? Math.max(0, Math.round(Number(depositAmount))) : null,
+        }),
+        ...(bankAlias !== undefined && { bankAlias: bankAlias ? bankAlias.trim() : null }),
+        ...(bankCbu !== undefined && { bankCbu: bankCbu ? bankCbu.trim() : null }),
+        ...(bankHolder !== undefined && { bankHolder: bankHolder ? bankHolder.trim() : null }),
+        ...(depositNotes !== undefined && { depositNotes: depositNotes ? depositNotes.trim() : null }),
       },
     });
 

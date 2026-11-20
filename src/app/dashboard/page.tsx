@@ -25,6 +25,8 @@ import {
   Plus,
   Pencil,
   Clock,
+  CreditCard,
+  Info,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -72,6 +74,12 @@ interface ProfileData {
   timezone: string;
   status: string;
   slotDuration: number;
+  depositRequired: boolean;
+  depositAmount: number | null;
+  bankAlias: string | null;
+  bankCbu: string | null;
+  bankHolder: string | null;
+  depositNotes: string | null;
   availabilities: DaySchedule[];
   services?: ServiceItem[];
   staffMembers?: StaffMemberItem[];
@@ -90,6 +98,8 @@ interface BookingItem {
   endTime: string;
   notes: string | null;
   status: string;
+  paymentStatus: string;
+  depositAmount: number | null;
 }
 
 const TIMEZONE_OPTIONS = [
@@ -116,7 +126,16 @@ export default function TenantDashboard() {
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMemberItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "STAFF" | "AVAILABILITY" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "STAFF" | "AVAILABILITY" | "DEPOSIT" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+
+  // Bank transfer / deposit settings
+  const [depositRequired, setDepositRequired] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [bankAlias, setBankAlias] = useState("");
+  const [bankCbu, setBankCbu] = useState("");
+  const [bankHolder, setBankHolder] = useState("");
+  const [depositNotes, setDepositNotes] = useState("");
+  const [savingDeposit, setSavingDeposit] = useState(false);
 
   // Service form states
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -192,6 +211,12 @@ export default function TenantDashboard() {
           setSlotDuration(p.slotDuration || 30);
           setServices(p.services || []);
           setStaffMembers(p.staffMembers || []);
+          setDepositRequired(Boolean(p.depositRequired));
+          setDepositAmount(p.depositAmount !== null && p.depositAmount !== undefined ? String(p.depositAmount) : "");
+          setBankAlias(p.bankAlias || "");
+          setBankCbu(p.bankCbu || "");
+          setBankHolder(p.bankHolder || "");
+          setDepositNotes(p.depositNotes || "");
 
           const fullWeek: DaySchedule[] = [];
           for (let day = 0; day <= 6; day++) {
@@ -364,6 +389,62 @@ export default function TenantDashboard() {
       showNotification("success", `Turno actualizado a "${newStatus}"`);
     } catch {
       showNotification("error", "No se pudo actualizar el turno");
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (bookingId: string, newPaymentStatus: string) => {
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, paymentStatus: newPaymentStatus }),
+      });
+
+      if (!res.ok) throw new Error("Error al actualizar estado de seña");
+
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, paymentStatus: newPaymentStatus } : b))
+      );
+      showNotification(
+        "success",
+        newPaymentStatus === "PAID"
+          ? "Seña marcada como acreditada"
+          : "Seña marcada como pendiente"
+      );
+    } catch {
+      showNotification("error", "No se pudo actualizar el estado de la seña");
+    }
+  };
+
+  const handleSaveDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingDeposit(true);
+    try {
+      const res = await fetch("/api/dashboard/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          depositRequired,
+          depositAmount: depositAmount.trim() ? Number(depositAmount) : null,
+          bankAlias,
+          bankCbu,
+          bankHolder,
+          depositNotes,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar configuración");
+
+      setProfile((prev) => (prev ? { ...prev, ...data.profile } : data.profile));
+      showNotification("success", "Configuración de señas guardada");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al guardar señas"
+      );
+    } finally {
+      setSavingDeposit(false);
     }
   };
 
@@ -875,6 +956,18 @@ export default function TenantDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveTab("DEPOSIT")}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "DEPOSIT"
+                ? "bg-white text-zinc-950 font-semibold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>Señas & No-Shows</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("DESIGN")}
             className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
               activeTab === "DESIGN"
@@ -978,6 +1071,43 @@ export default function TenantDashboard() {
                       <div className="text-xs text-zinc-400 font-mono mt-1">
                         {formatDateSpanish(b.date)}
                       </div>
+
+                      {/* Payment / Deposit Badge */}
+                      {b.paymentStatus === "PENDING" && (
+                        <div className="mt-2.5 flex items-center justify-between p-2 rounded-lg bg-amber-950/40 border border-amber-900/60 text-[11px] text-amber-200">
+                          <span className="flex items-center gap-1 font-medium">
+                            <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span>
+                              Seña Pendiente {b.depositAmount ? `($${b.depositAmount.toLocaleString("es-AR")})` : ""}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePaymentStatus(b.id, "PAID")}
+                            className="px-2 py-0.5 rounded bg-amber-400 text-zinc-950 font-semibold text-[10px] hover:bg-amber-300 transition"
+                          >
+                            Marcar acreditada
+                          </button>
+                        </div>
+                      )}
+
+                      {b.paymentStatus === "PAID" && (
+                        <div className="mt-2.5 flex items-center justify-between p-2 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-[11px] text-emerald-300">
+                          <span className="flex items-center gap-1 font-medium">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>
+                              Seña Acreditada {b.depositAmount ? `($${b.depositAmount.toLocaleString("es-AR")})` : ""}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePaymentStatus(b.id, "PENDING")}
+                            className="text-[10px] text-zinc-400 hover:text-zinc-200 underline"
+                          >
+                            Desmarcar
+                          </button>
+                        </div>
+                      )}
 
                       <div className="mt-3 space-y-1 text-xs text-zinc-400 font-light">
                         <div className="flex items-center gap-1.5 font-mono">
@@ -1814,7 +1944,163 @@ export default function TenantDashboard() {
           </div>
         )}
 
-        {/* TAB 3: VISUAL CUSTOMIZATION */}
+        {/* TAB: DEPOSIT & NO-SHOWS */}
+        {activeTab === "DEPOSIT" && (
+          <form onSubmit={handleSaveDeposit} className="space-y-4">
+            <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-emerald-400" />
+                    <span>Señas Bancarias & Política Anti No-Shows</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                    Exigí un anticipo por transferencia para confirmar reservas y evitar clientes que no asisten.
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingDeposit}
+                  className="px-4 py-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {savingDeposit ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>Guardar Señas</span>
+                </button>
+              </div>
+
+              {/* Toggle switch */}
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 flex items-center justify-between mb-5">
+                <div>
+                  <span className="block text-xs font-semibold text-white">
+                    Activar solicitud de seña bancaria
+                  </span>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 font-light">
+                    Los clientes verán tus datos bancarios al reservar y deberán enviarte el comprobante de pago por WhatsApp.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={depositRequired}
+                    onChange={(e) => setDepositRequired(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Monto de la seña */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <label className="block text-xs font-semibold text-white mb-1">
+                    Monto de la seña ($ ARS)
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mb-2">
+                    Monto fijo solicitado al reservar (ej: 2000, 3000, etc.).
+                  </p>
+                  <div className="flex items-center rounded-xl minimal-input px-3">
+                    <span className="text-xs text-zinc-400 font-mono mr-1">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      placeholder="Ej: 2000"
+                      className="w-full py-2 bg-transparent text-xs text-white outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Alias */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <label className="block text-xs font-semibold text-white mb-1">
+                    Alias bancario o billetera virtual
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mb-2">
+                    Tu Alias de Mercado Pago, Ualá o banco (fácil de copiar para el cliente).
+                  </p>
+                  <input
+                    type="text"
+                    value={bankAlias}
+                    onChange={(e) => setBankAlias(e.target.value)}
+                    placeholder="Ej: barberia.estilo.mp"
+                    className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                  />
+                </div>
+
+                {/* Titular */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <label className="block text-xs font-semibold text-white mb-1">
+                    Nombre del titular
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mb-2">
+                    Para que el cliente verifique a quién le transfiere.
+                  </p>
+                  <input
+                    type="text"
+                    value={bankHolder}
+                    onChange={(e) => setBankHolder(e.target.value)}
+                    placeholder="Ej: Juan Perez"
+                    className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white"
+                  />
+                </div>
+
+                {/* CBU / CVU */}
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <label className="block text-xs font-semibold text-white mb-1">
+                    CBU o CVU (Opcional)
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mb-2">
+                    22 dígitos para transferencias tradicionales.
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={22}
+                    value={bankCbu}
+                    onChange={(e) => setBankCbu(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="Ej: 0000003100010000000000"
+                    className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Indicaciones / Notas */}
+              <div className="mt-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                <label className="block text-xs font-semibold text-white mb-1">
+                  Instrucciones o política de reserva (Opcional)
+                </label>
+                <p className="text-[11px] text-zinc-400 mb-2">
+                  Aparecerá en la pantalla del cliente y en los correos de confirmación.
+                </p>
+                <textarea
+                  value={depositNotes}
+                  onChange={(e) => setDepositNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Ej: Tenés 2 horas para enviar el comprobante de transferencia por WhatsApp. En caso contrario, el turno se libera automáticamente."
+                  className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white resize-none"
+                />
+              </div>
+
+              {/* Banner informativo */}
+              <div className="mt-4 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-900/20 text-xs text-zinc-400 flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <p>
+                    <strong className="text-zinc-200">¿Cómo funciona?</strong> Cuando un cliente complete su reserva, verá el monto de la seña junto con tus datos bancarios y un botón para copiar tu Alias con 1 click.
+                  </p>
+                  <p>
+                    Al abrir WhatsApp, el mensaje vendrá pre-redactado solicitándole que te adjunte la captura del comprobante. En tu panel de <strong>Turnos</strong>, cada reserva aparecerá con la etiqueta <span className="text-amber-300 font-semibold">Seña Pendiente</span> y podrás marcarla como <span className="text-emerald-300 font-semibold">Acreditada</span> con un solo botón una vez que recibas el dinero.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
         {activeTab === "DESIGN" && (
           <form
             onSubmit={(e) => {
