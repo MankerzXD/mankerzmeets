@@ -36,6 +36,7 @@ import {
   Bell,
   Send,
   MapPin,
+  Zap,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -1049,6 +1050,16 @@ export default function TenantDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/pricing"
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 hover:text-white hover:border-zinc-700 transition"
+              title="Ver planes y suscripciones"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Planes</span>
+            </Link>
+
             {profile && (
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono">
                 <span className="text-zinc-500">/{profile.slug}</span>

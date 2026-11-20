@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Smartphone,
@@ -25,6 +25,15 @@ export default function LandingPage() {
   const [selectedDay, setSelectedDay] = useState(14);
   const [selectedSlot, setSelectedSlot] = useState("11:30");
   const [previewConfirmed, setPreviewConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#pricing") {
+      const timer = setTimeout(() => {
+        document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-zinc-800 selection:text-white">
@@ -53,12 +62,12 @@ export default function LandingPage() {
             <a href="#features" className="hover:text-white transition">
               Ventajas
             </a>
-            <a href="#pricing" className="hover:text-white transition flex items-center gap-1.5">
+            <Link href="/pricing" className="hover:text-white transition flex items-center gap-1.5">
               <span>Planes y Precios</span>
               <span className="text-[9px] font-mono px-1.5 py-0.2 bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 rounded-full">
                 ARS
               </span>
-            </a>
+            </Link>
             <a href="#preview" className="hover:text-white transition">
               Cómo se ve
             </a>
@@ -112,12 +121,12 @@ export default function LandingPage() {
             <span>Crear mi perfil gratis en 30 segundos</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
-          <a
-            href="#pricing"
+          <Link
+            href="/pricing"
             className="w-full sm:w-auto px-6 py-3.5 rounded-full border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900 text-zinc-300 font-medium text-sm transition flex items-center justify-center gap-2"
           >
             <span>Ver planes y precios</span>
-          </a>
+          </Link>
         </div>
 
         <p className="mt-3 text-[11px] text-zinc-500 font-light">
@@ -761,9 +770,9 @@ export default function LandingPage() {
             <span>meet.mankerz.xyz</span>
           </div>
           <div className="flex items-center gap-5">
-            <a href="#pricing" className="hover:text-zinc-300 transition">
+            <Link href="/pricing" className="hover:text-zinc-300 transition">
               Precios
-            </a>
+            </Link>
             <Link href="/login" className="hover:text-zinc-300 transition">
               Iniciar Sesión
             </Link>
