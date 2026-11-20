@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, role, avatarUrl, email, phone } = body;
+    const { name, role, avatarUrl, email, phone, commissionPercentage } = body;
 
     if (!name || typeof name !== "string" || name.trim().length < 2) {
       return NextResponse.json(
@@ -58,6 +58,11 @@ export async function POST(req: Request) {
 
     const count = await prisma.staffMember.count({ where: { profileId } });
 
+    const parsedCommission =
+      commissionPercentage !== undefined && commissionPercentage !== null && commissionPercentage !== ""
+        ? Math.min(100, Math.max(0, Math.round(Number(commissionPercentage))))
+        : 0;
+
     const staffMember = await prisma.staffMember.create({
       data: {
         profileId,
@@ -66,6 +71,7 @@ export async function POST(req: Request) {
         avatarUrl: avatarUrl && typeof avatarUrl === "string" ? avatarUrl.trim() : null,
         email: email && typeof email === "string" && email.includes("@") ? email.trim() : null,
         phone: phone && typeof phone === "string" ? phone.trim() : null,
+        commissionPercentage: parsedCommission,
         sortOrder: count,
         isActive: true,
       },
@@ -98,7 +104,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { id, name, role, avatarUrl, email, phone, isActive, sortOrder } = body;
+    const { id, name, role, avatarUrl, email, phone, commissionPercentage, isActive, sortOrder } = body;
 
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "ID de profesional requerido." }, { status: 400 });
@@ -121,6 +127,7 @@ export async function PUT(req: Request) {
       avatarUrl?: string | null;
       email?: string | null;
       phone?: string | null;
+      commissionPercentage?: number;
       isActive?: boolean;
       sortOrder?: number;
     } = {};
@@ -154,6 +161,13 @@ export async function PUT(req: Request) {
     if (phone !== undefined) {
       updateData.phone =
         phone && typeof phone === "string" ? phone.trim() : null;
+    }
+
+    if (commissionPercentage !== undefined) {
+      updateData.commissionPercentage =
+        commissionPercentage !== null && commissionPercentage !== ""
+          ? Math.min(100, Math.max(0, Math.round(Number(commissionPercentage))))
+          : 0;
     }
 
     if (isActive !== undefined) {

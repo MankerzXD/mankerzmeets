@@ -78,6 +78,7 @@ model StaffMember {
   avatarUrl   String?  // Optional staff avatar photo
   email       String?  // Optional email to receive booking notifications
   phone       String?  // Optional phone / WhatsApp
+  commissionPercentage Int @default(0) // Commission percentage (e.g. 15, 25, 40)
   isActive    Boolean  @default(true)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
@@ -129,6 +130,7 @@ model Booking {
   serviceId       String?
   service         Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   serviceName     String?      // Snapshot of selected service name
+  servicePrice    Int?         // Snapshot of price charged for this appointment
   staffMemberId   String?
   staffMember     StaffMember? @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
   staffMemberName String?      // Snapshot of staff member name (e.g. "Lucas")

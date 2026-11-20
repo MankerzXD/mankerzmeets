@@ -64,7 +64,7 @@ export async function POST(
     }
 
     // Resolve service & duration
-    let selectedService: { id: string; name: string; duration: number } | null = null;
+    let selectedService: { id: string; name: string; duration: number; price: number | null } | null = null;
     if (profile.services.length > 0) {
       if (!serviceId) {
         return NextResponse.json(
@@ -222,6 +222,7 @@ export async function POST(
           profileId: profile.id,
           serviceId: selectedService ? selectedService.id : null,
           serviceName: selectedService ? selectedService.name : null,
+          servicePrice: selectedService?.price ?? null,
           staffMemberId: assignedStaff ? assignedStaff.id : null,
           staffMemberName: assignedStaff ? assignedStaff.name : null,
           customerName: customerName.trim(),

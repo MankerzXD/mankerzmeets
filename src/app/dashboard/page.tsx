@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -27,6 +27,11 @@ import {
   Clock,
   CreditCard,
   Info,
+  Percent,
+  TrendingUp,
+  DollarSign,
+  Wallet,
+  CalendarDays,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -56,6 +61,7 @@ interface StaffMemberItem {
   avatarUrl: string | null;
   email: string | null;
   phone: string | null;
+  commissionPercentage: number;
   isActive: boolean;
   sortOrder: number;
 }
@@ -87,7 +93,9 @@ interface ProfileData {
 
 interface BookingItem {
   id: string;
+  serviceId?: string | null;
   serviceName: string | null;
+  servicePrice?: number | null;
   staffMemberName?: string | null;
   staffMemberId?: string | null;
   customerName: string;
@@ -100,6 +108,19 @@ interface BookingItem {
   status: string;
   paymentStatus: string;
   depositAmount: number | null;
+  staffMember?: {
+    id: string;
+    name: string;
+    role: string | null;
+    avatarUrl: string | null;
+    commissionPercentage: number;
+  } | null;
+  service?: {
+    id: string;
+    name: string;
+    duration: number;
+    price: number | null;
+  } | null;
 }
 
 const TIMEZONE_OPTIONS = [
@@ -126,7 +147,7 @@ export default function TenantDashboard() {
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMemberItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "SERVICES" | "STAFF" | "AVAILABILITY" | "DEPOSIT" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
+  const [activeTab, setActiveTab] = useState<"BOOKINGS" | "CONTROL" | "SERVICES" | "STAFF" | "AVAILABILITY" | "DEPOSIT" | "DESIGN" | "CONTACT" | "QR">("BOOKINGS");
 
   // Bank transfer / deposit settings
   const [depositRequired, setDepositRequired] = useState(false);
@@ -136,6 +157,26 @@ export default function TenantDashboard() {
   const [bankHolder, setBankHolder] = useState("");
   const [depositNotes, setDepositNotes] = useState("");
   const [savingDeposit, setSavingDeposit] = useState(false);
+
+  // Control & Comisiones states
+  const [controlPeriod, setControlPeriod] = useState<"today" | "week" | "month" | "all">("month");
+  const [controlStaffFilter, setControlStaffFilter] = useState<string>("all");
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualCustomerName, setManualCustomerName] = useState("Cliente en local");
+  const [manualCustomerPhone, setManualCustomerPhone] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [manualStartTime, setManualStartTime] = useState("10:00");
+  const [manualServiceId, setManualServiceId] = useState("");
+  const [manualStaffMemberId, setManualStaffMemberId] = useState("");
+  const [manualServicePrice, setManualServicePrice] = useState("");
+  const [manualStatus, setManualStatus] = useState("COMPLETED");
+  const [manualNotes, setManualNotes] = useState("");
+  const [savingManualBooking, setSavingManualBooking] = useState(false);
+  const [editingPriceBookingId, setEditingPriceBookingId] = useState<string | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState("");
+  const [todayStr, setTodayStr] = useState("");
+  const [mondayStr, setMondayStr] = useState("");
+  const [currentYearMonth, setCurrentYearMonth] = useState("");
 
   // Service form states
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -150,6 +191,7 @@ export default function TenantDashboard() {
   const [staffRole, setStaffRole] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
+  const [staffCommissionPercentage, setStaffCommissionPercentage] = useState("");
   const [staffAvatarUrl, setStaffAvatarUrl] = useState("");
   const [savingStaff, setSavingStaff] = useState(false);
   const [uploadingStaffPhoto, setUploadingStaffPhoto] = useState(false);
@@ -160,6 +202,7 @@ export default function TenantDashboard() {
   const [editStaffRole, setEditStaffRole] = useState("");
   const [editStaffEmail, setEditStaffEmail] = useState("");
   const [editStaffPhone, setEditStaffPhone] = useState("");
+  const [editStaffCommissionPercentage, setEditStaffCommissionPercentage] = useState("");
   const [editStaffAvatarUrl, setEditStaffAvatarUrl] = useState("");
   const [savingEditStaff, setSavingEditStaff] = useState(false);
   const [uploadingEditStaffPhoto, setUploadingEditStaffPhoto] = useState(false);
@@ -186,6 +229,17 @@ export default function TenantDashboard() {
   useEffect(() => {
     async function loadData() {
       try {
+        const now = new Date();
+        const today = now.toISOString().split("T")[0];
+        setTodayStr(today);
+        setManualDate(today);
+        setCurrentYearMonth(today.substring(0, 7));
+
+        const dayOfWeek = (now.getDay() + 6) % 7;
+        const mon = new Date(now);
+        mon.setDate(now.getDate() - dayOfWeek);
+        setMondayStr(mon.toISOString().split("T")[0]);
+
         const authRes = await fetch("/api/auth/me");
         if (!authRes.ok) {
           router.push("/login");
@@ -373,25 +427,6 @@ export default function TenantDashboard() {
     }
   };
 
-  const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
-    try {
-      const res = await fetch("/api/dashboard/bookings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, status: newStatus }),
-      });
-
-      if (!res.ok) throw new Error("Error al actualizar turno");
-
-      setBookings((prev) =>
-        prev.map((b) => (b.id === bookingId ? { ...b, status: newStatus } : b))
-      );
-      showNotification("success", `Turno actualizado a "${newStatus}"`);
-    } catch {
-      showNotification("error", "No se pudo actualizar el turno");
-    }
-  };
-
   const handleUpdatePaymentStatus = async (bookingId: string, newPaymentStatus: string) => {
     try {
       const res = await fetch("/api/dashboard/bookings", {
@@ -539,6 +574,7 @@ export default function TenantDashboard() {
     setStaffRole("");
     setStaffEmail("");
     setStaffPhone("");
+    setStaffCommissionPercentage("");
     setStaffAvatarUrl("");
   };
 
@@ -554,6 +590,7 @@ export default function TenantDashboard() {
           role: staffRole,
           email: staffEmail,
           phone: staffPhone,
+          commissionPercentage: staffCommissionPercentage ? Number(staffCommissionPercentage) : 0,
           avatarUrl: staffAvatarUrl,
         }),
       });
@@ -583,6 +620,11 @@ export default function TenantDashboard() {
       setEditStaffRole(staff.role || "");
       setEditStaffEmail(staff.email || "");
       setEditStaffPhone(staff.phone || "");
+      setEditStaffCommissionPercentage(
+        staff.commissionPercentage !== undefined && staff.commissionPercentage !== null
+          ? String(staff.commissionPercentage)
+          : "0"
+      );
       setEditStaffAvatarUrl(staff.avatarUrl || "");
     }
   };
@@ -600,6 +642,7 @@ export default function TenantDashboard() {
           role: editStaffRole,
           email: editStaffEmail,
           phone: editStaffPhone,
+          commissionPercentage: editStaffCommissionPercentage ? Number(editStaffCommissionPercentage) : 0,
           avatarUrl: editStaffAvatarUrl,
         }),
       });
@@ -619,6 +662,102 @@ export default function TenantDashboard() {
       );
     } finally {
       setSavingEditStaff(false);
+    }
+  };
+
+  const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Error al actualizar estado");
+      const data = await res.json();
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b))
+      );
+      showNotification(
+        "success",
+        `Turno marcado como ${newStatus === "COMPLETED" ? "completado" : newStatus === "CANCELLED" ? "cancelado" : "confirmado"}`
+      );
+    } catch {
+      showNotification("error", "No se pudo actualizar el turno");
+    }
+  };
+
+  const handleUpdateBookingStaff = async (bookingId: string, staffMemberId: string) => {
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, staffMemberId: staffMemberId || null }),
+      });
+      if (!res.ok) throw new Error("Error al asignar profesional");
+      const data = await res.json();
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b))
+      );
+      showNotification("success", "Profesional asignado correctamente");
+    } catch {
+      showNotification("error", "No se pudo asignar el profesional");
+    }
+  };
+
+  const handleUpdateBookingPrice = async (bookingId: string, price: number) => {
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, servicePrice: price }),
+      });
+      if (!res.ok) throw new Error("Error al actualizar precio");
+      const data = await res.json();
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b))
+      );
+      showNotification("success", "Precio actualizado correctamente");
+      setEditingPriceBookingId(null);
+    } catch {
+      showNotification("error", "No se pudo actualizar el precio");
+    }
+  };
+
+  const handleCreateManualBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingManualBooking(true);
+    try {
+      const res = await fetch("/api/dashboard/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: manualCustomerName || "Cliente en local",
+          customerPhone: manualCustomerPhone,
+          date: manualDate,
+          startTime: manualStartTime,
+          serviceId: manualServiceId || null,
+          staffMemberId: manualStaffMemberId || null,
+          servicePrice: manualServicePrice ? Number(manualServicePrice) : null,
+          status: manualStatus,
+          notes: manualNotes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al registrar turno");
+
+      setBookings((prev) => [data.booking, ...prev]);
+      showNotification("success", "Turno registrado con éxito");
+      setShowManualModal(false);
+      setManualCustomerName("Cliente en local");
+      setManualCustomerPhone("");
+      setManualNotes("");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al registrar turno"
+      );
+    } finally {
+      setSavingManualBooking(false);
     }
   };
 
@@ -737,6 +876,79 @@ export default function TenantDashboard() {
     router.push("/login");
     router.refresh();
   };
+
+  // Control Tab calculations & filtering
+  const filteredControlBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (b.status === "CANCELLED") return false;
+
+      if (controlStaffFilter !== "all" && b.staffMemberId !== controlStaffFilter) {
+        return false;
+      }
+
+      if (controlPeriod === "today") {
+        return b.date === todayStr;
+      }
+      if (controlPeriod === "week") {
+        return b.date >= mondayStr;
+      }
+      if (controlPeriod === "month") {
+        return b.date.startsWith(currentYearMonth);
+      }
+      return true; // "all"
+    });
+  }, [bookings, controlPeriod, controlStaffFilter, todayStr, mondayStr, currentYearMonth]);
+
+  const controlStats = useMemo(() => {
+    let totalRevenue = 0;
+    let totalStaffCommissions = 0;
+    const totalBookings = filteredControlBookings.length;
+    let completedBookings = 0;
+
+    filteredControlBookings.forEach((b) => {
+      const price = b.servicePrice ?? b.service?.price ?? 0;
+      const staff = staffMembers.find((s) => s.id === b.staffMemberId);
+      const commissionPct = staff?.commissionPercentage ?? b.staffMember?.commissionPercentage ?? 0;
+      const staffCut = Math.round((price * commissionPct) / 100);
+
+      totalRevenue += price;
+      totalStaffCommissions += staffCut;
+      if (b.status === "COMPLETED") completedBookings++;
+    });
+
+    const netProfit = totalRevenue - totalStaffCommissions;
+
+    return {
+      totalBookings,
+      completedBookings,
+      totalRevenue,
+      totalStaffCommissions,
+      netProfit,
+    };
+  }, [filteredControlBookings, staffMembers]);
+
+  const staffBreakdowns = useMemo(() => {
+    return staffMembers.map((staff) => {
+      const staffBookings = filteredControlBookings.filter((b) => b.staffMemberId === staff.id);
+      let revenue = 0;
+      staffBookings.forEach((b) => {
+        const price = b.servicePrice ?? b.service?.price ?? 0;
+        revenue += price;
+      });
+      const commissionPct = staff.commissionPercentage || 0;
+      const commissionEarned = Math.round((revenue * commissionPct) / 100);
+      const businessRetained = revenue - commissionEarned;
+
+      return {
+        staff,
+        bookingCount: staffBookings.length,
+        revenue,
+        commissionPct,
+        commissionEarned,
+        businessRetained,
+      };
+    });
+  }, [filteredControlBookings, staffMembers]);
 
   if (loading) {
     return (
@@ -919,6 +1131,18 @@ export default function TenantDashboard() {
             }`}
           >
             Turnos ({bookings.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("CONTROL")}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "CONTROL"
+                ? "bg-white text-zinc-950 font-semibold"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Control & Caja</span>
           </button>
 
           <button
@@ -1154,6 +1378,665 @@ export default function TenantDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: CONTROL, RENDICIÓN & CAJA */}
+        {activeTab === "CONTROL" && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Header & Main Action */}
+            <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>Control, Rendición & Liquidación de Caja</span>
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                  Seguimiento de turnos, facturación bruta, comisiones de tu equipo y ganancia neta en tiempo real.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setManualDate(todayStr);
+                  setManualCustomerName("Cliente en local");
+                  setManualCustomerPhone("");
+                  setManualServicePrice(services[0]?.price ? String(services[0].price) : "");
+                  setManualServiceId(services[0]?.id || "");
+                  setManualStaffMemberId(staffMembers[0]?.id || "");
+                  setManualStatus("COMPLETED");
+                  setShowManualModal(true);
+                }}
+                className="px-4 py-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-start sm:self-auto"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Registrar Turno en Local</span>
+              </button>
+            </div>
+
+            {/* Filters Toolbar */}
+            <div className="p-3.5 rounded-2xl border border-zinc-800 bg-[#121215] flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                <span className="text-zinc-500 text-[11px] font-medium mr-1 flex items-center gap-1">
+                  <CalendarDays className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Período:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setControlPeriod("today")}
+                  className={`px-3 py-1.5 rounded-full font-medium transition cursor-pointer ${
+                    controlPeriod === "today"
+                      ? "bg-white text-zinc-950 font-semibold"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
+                  }`}
+                >
+                  Hoy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setControlPeriod("week")}
+                  className={`px-3 py-1.5 rounded-full font-medium transition cursor-pointer ${
+                    controlPeriod === "week"
+                      ? "bg-white text-zinc-950 font-semibold"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
+                  }`}
+                >
+                  Esta Semana
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setControlPeriod("month")}
+                  className={`px-3 py-1.5 rounded-full font-medium transition cursor-pointer ${
+                    controlPeriod === "month"
+                      ? "bg-white text-zinc-950 font-semibold"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
+                  }`}
+                >
+                  Este Mes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setControlPeriod("all")}
+                  className={`px-3 py-1.5 rounded-full font-medium transition cursor-pointer ${
+                    controlPeriod === "all"
+                      ? "bg-white text-zinc-950 font-semibold"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
+                  }`}
+                >
+                  Todo el Historial
+                </button>
+              </div>
+
+              {/* Staff filter dropdown */}
+              {staffMembers.length > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-zinc-500 text-[11px] whitespace-nowrap">Filtrar por:</span>
+                  <select
+                    value={controlStaffFilter}
+                    onChange={(e) => setControlStaffFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl minimal-input text-xs text-white bg-zinc-900 border border-zinc-800 cursor-pointer"
+                  >
+                    <option value="all">Todos los colaboradores ({staffMembers.length})</option>
+                    {staffMembers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.commissionPercentage || 0}% com.)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* 4 KPI Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Turnos Realizados */}
+              <div className="p-4 rounded-2xl border border-zinc-800 bg-[#121215] flex flex-col justify-between">
+                <div className="flex items-center justify-between text-zinc-400 mb-2">
+                  <span className="text-xs font-medium text-zinc-300">Turnos Registrados</span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400">
+                    <CalendarDays className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold font-mono text-white">
+                    {controlStats.totalBookings}
+                  </div>
+                  <span className="text-[11px] text-zinc-500 mt-0.5 block font-light">
+                    {controlStats.completedBookings} completados / atendidos
+                  </span>
+                </div>
+              </div>
+
+              {/* Facturación Bruta */}
+              <div className="p-4 rounded-2xl border border-zinc-800 bg-[#121215] flex flex-col justify-between">
+                <div className="flex items-center justify-between text-zinc-400 mb-2">
+                  <span className="text-xs font-medium text-zinc-300">Facturación Bruta (Caja)</span>
+                  <div className="w-7 h-7 rounded-lg bg-amber-950/40 border border-amber-900/40 flex items-center justify-center text-amber-400">
+                    <DollarSign className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold font-mono text-white">
+                    ${controlStats.totalRevenue.toLocaleString("es-AR")}
+                  </div>
+                  <span className="text-[11px] text-zinc-500 mt-0.5 block font-light">
+                    Total generado por servicios
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Comisiones a Liquidar */}
+              <div className="p-4 rounded-2xl border border-zinc-800 bg-[#121215] flex flex-col justify-between">
+                <div className="flex items-center justify-between text-zinc-400 mb-2">
+                  <span className="text-xs font-medium text-zinc-300">Comisiones a Liquidar</span>
+                  <div className="w-7 h-7 rounded-lg bg-purple-950/40 border border-purple-900/40 flex items-center justify-center text-purple-400">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold font-mono text-purple-300">
+                    ${controlStats.totalStaffCommissions.toLocaleString("es-AR")}
+                  </div>
+                  <span className="text-[11px] text-zinc-500 mt-0.5 block font-light">
+                    Dinero a pagar al equipo
+                  </span>
+                </div>
+              </div>
+
+              {/* Ganancia Neta del Negocio */}
+              <div className="p-4 rounded-2xl border border-emerald-900/40 bg-emerald-950/10 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-emerald-400 mb-2">
+                  <span className="text-xs font-semibold text-emerald-300">Ganancia Neta Local</span>
+                  <div className="w-7 h-7 rounded-lg bg-emerald-950/60 border border-emerald-900/60 flex items-center justify-center text-emerald-400">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold font-mono text-emerald-400">
+                    ${controlStats.netProfit.toLocaleString("es-AR")}
+                  </div>
+                  <span className="text-[11px] text-emerald-300/70 mt-0.5 block font-light">
+                    Margen retenido por el negocio
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual Staff Breakdown Cards */}
+            {staffMembers.length > 0 && (
+              <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Percent className="w-4 h-4 text-emerald-400" />
+                      <span>Liquidación y Rendición por Profesional</span>
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                      Cálculo automático de comisiones según el porcentaje asignado a cada colaborador.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("STAFF")}
+                    className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
+                  >
+                    Editar porcentajes en Equipo
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {staffBreakdowns.map((b) => (
+                    <div
+                      key={b.staff.id}
+                      className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden shrink-0 text-xs font-bold text-white">
+                              {b.staff.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={b.staff.avatarUrl}
+                                  alt={b.staff.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                b.staff.name.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-white">{b.staff.name}</div>
+                              <div className="text-[10px] text-zinc-400 font-light">{b.staff.role || "Profesional"}</div>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-900/50">
+                            {b.commissionPct}% com.
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs pt-1 border-t border-zinc-800/80">
+                          <div className="flex justify-between text-zinc-400 text-[11px]">
+                            <span>Turnos realizados:</span>
+                            <span className="font-mono text-white font-medium">{b.bookingCount}</span>
+                          </div>
+                          <div className="flex justify-between text-zinc-400 text-[11px]">
+                            <span>Total recaudado:</span>
+                            <span className="font-mono text-zinc-200">${b.revenue.toLocaleString("es-AR")}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] pt-1 border-t border-zinc-800/50">
+                            <span className="text-emerald-400 font-medium">A pagarle ({b.commissionPct}%):</span>
+                            <span className="font-mono font-bold text-emerald-300">
+                              ${b.commissionEarned.toLocaleString("es-AR")}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-[11px] text-zinc-500">
+                            <span>Queda para el local:</span>
+                            <span className="font-mono text-zinc-300">
+                              ${b.businessRetained.toLocaleString("es-AR")}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setControlStaffFilter(controlStaffFilter === b.staff.id ? "all" : b.staff.id)}
+                        className={`mt-3 w-full py-1.5 rounded-lg text-[11px] font-medium transition cursor-pointer border ${
+                          controlStaffFilter === b.staff.id
+                            ? "bg-white text-zinc-950 border-white font-semibold"
+                            : "bg-zinc-800/60 text-zinc-300 border-zinc-700/60 hover:bg-zinc-800"
+                        }`}
+                      >
+                        {controlStaffFilter === b.staff.id ? "Ver todos los barberos" : "Ver solo sus turnos"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Detailed Turn Breakdown Table */}
+            <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">
+                    Historial de Turnos y Quién Realizó Cada Servicio ({filteredControlBookings.length})
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                    Podés reasignar quién atendió al cliente o modificar el valor cobrado si hubo descuentos o extras.
+                  </p>
+                </div>
+              </div>
+
+              {filteredControlBookings.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-zinc-800 rounded-xl">
+                  <CalendarDays className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-400 font-medium">
+                    No hay turnos registrados en este período.
+                  </p>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    Cambiá el filtro de fecha o registrá un turno manual con el botón de arriba.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredControlBookings.map((b) => {
+                    const price = b.servicePrice ?? b.service?.price ?? 0;
+                    const staff = staffMembers.find((s) => s.id === b.staffMemberId);
+                    const commissionPct = staff?.commissionPercentage ?? b.staffMember?.commissionPercentage ?? 0;
+                    const staffCut = Math.round((price * commissionPct) / 100);
+                    const localCut = price - staffCut;
+                    const isEditingPrice = editingPriceBookingId === b.id;
+
+                    return (
+                      <div
+                        key={b.id}
+                        className={`p-4 rounded-xl border transition ${
+                          b.status === "COMPLETED"
+                            ? "bg-zinc-900/30 border-zinc-800"
+                            : "bg-zinc-900/60 border-zinc-700/80"
+                        }`}
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          {/* Columna 1: Info del turno */}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-white">{b.customerName}</span>
+                              <span className="text-[11px] font-mono text-zinc-400">
+                                {b.date} • {b.startTime} a {b.endTime} hs
+                              </span>
+                              <span
+                                className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full ${
+                                  b.status === "COMPLETED"
+                                    ? "bg-emerald-950 text-emerald-300 border border-emerald-900/50"
+                                    : "bg-blue-950 text-blue-300 border border-blue-900/50"
+                                }`}
+                              >
+                                {b.status === "COMPLETED" ? "Atendido / Cobrado" : "Agendado"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-xs text-zinc-400">
+                              <span>Servicio: <strong className="text-zinc-200">{b.serviceName || "Turno general"}</strong></span>
+                              {b.customerPhone && (
+                                <a
+                                  href={`https://wa.me/${b.customerPhone.replace(/[^\d]/g, "")}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-zinc-500 hover:text-white flex items-center gap-1 font-mono text-[11px]"
+                                >
+                                  <Phone className="w-3 h-3 text-emerald-500" />
+                                  <span>{b.customerPhone}</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Columna 2: Quién lo atendió (Selector dinámico) */}
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div>
+                              <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
+                                Realizado por:
+                              </label>
+                              <select
+                                value={b.staffMemberId || ""}
+                                onChange={(e) => handleUpdateBookingStaff(b.id, e.target.value)}
+                                className="px-2.5 py-1.5 rounded-lg text-xs text-white bg-zinc-950 border border-zinc-700 cursor-pointer font-medium"
+                              >
+                                <option value="">Sin asignar / Mostrador</option>
+                                {staffMembers.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.commissionPercentage || 0}% com.)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Columna 3: Precio y edición rápida */}
+                            <div>
+                              <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
+                                Cobrado:
+                              </label>
+                              {isEditingPrice ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    value={editingPriceValue}
+                                    onChange={(e) => setEditingPriceValue(e.target.value)}
+                                    placeholder="0"
+                                    className="w-20 px-2 py-1 rounded minimal-input text-xs text-white font-mono"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateBookingPrice(b.id, Number(editingPriceValue))}
+                                    className="p-1 rounded bg-emerald-500 text-zinc-950"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingPriceBookingId(null)}
+                                    className="p-1 rounded bg-zinc-800 text-zinc-400"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-mono font-bold text-white">
+                                    ${price.toLocaleString("es-AR")}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingPriceBookingId(b.id);
+                                      setEditingPriceValue(String(price));
+                                    }}
+                                    title="Modificar precio cobrado"
+                                    className="p-1 rounded text-zinc-500 hover:text-white"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Columna 4: Comisión calculada */}
+                            <div className="p-2 rounded-lg bg-zinc-950/70 border border-zinc-800 text-right min-w-[140px]">
+                              <div className="text-[11px] text-emerald-400 font-semibold font-mono">
+                                Com: ${staffCut.toLocaleString("es-AR")} ({commissionPct}%)
+                              </div>
+                              <div className="text-[10px] text-zinc-400 font-mono">
+                                Local: ${localCut.toLocaleString("es-AR")}
+                              </div>
+                            </div>
+
+                            {/* Columna 5: Acción rápida estado */}
+                            <div>
+                              {b.status === "CONFIRMED" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateBookingStatus(b.id, "COMPLETED")}
+                                  className="px-3 py-1.5 rounded-lg bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-medium transition cursor-pointer flex items-center gap-1"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>Marcar Cobrado</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateBookingStatus(b.id, "CONFIRMED")}
+                                  className="text-[11px] text-zinc-500 hover:text-zinc-300 underline"
+                                >
+                                  Reabrir
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal: Registrar Turno en Local */}
+            {showManualModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+                <div className="rounded-2xl border border-zinc-800 bg-[#121215] max-w-lg w-full p-6 shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <Plus className="w-4 h-4 text-emerald-400" />
+                        <span>Registrar Turno / Corte Realizado</span>
+                      </h3>
+                      <p className="text-xs text-zinc-400 font-light mt-0.5">
+                        Cargá un turno presencial para el balance y la liquidación del equipo.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowManualModal(false)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateManualBooking} className="space-y-3.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Nombre del Cliente
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={manualCustomerName}
+                          onChange={(e) => setManualCustomerName(e.target.value)}
+                          placeholder="Ej: Lucas / Cliente Mostrador"
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Teléfono / WhatsApp (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={manualCustomerPhone}
+                          onChange={(e) => setManualCustomerPhone(e.target.value)}
+                          placeholder="Ej: 5491122334455"
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Fecha *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={manualDate}
+                          onChange={(e) => setManualDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Hora *
+                        </label>
+                        <input
+                          type="time"
+                          required
+                          value={manualStartTime}
+                          onChange={(e) => setManualStartTime(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Profesional / Barbero *
+                        </label>
+                        <select
+                          value={manualStaffMemberId}
+                          onChange={(e) => setManualStaffMemberId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white bg-zinc-900"
+                        >
+                          <option value="">Sin asignar / Mostrador</option>
+                          {staffMembers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.commissionPercentage || 0}% com.)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Tipo de Turno / Servicio
+                        </label>
+                        <select
+                          value={manualServiceId}
+                          onChange={(e) => {
+                            const sid = e.target.value;
+                            setManualServiceId(sid);
+                            const found = services.find((s) => s.id === sid);
+                            if (found && found.price !== null) {
+                              setManualServicePrice(String(found.price));
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white bg-zinc-900"
+                        >
+                          <option value="">General / Personalizado</option>
+                          {services.map((srv) => (
+                            <option key={srv.id} value={srv.id}>
+                              {srv.name} {srv.price ? `($${srv.price.toLocaleString("es-AR")})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Monto Cobrado ($ ARS) *
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          required
+                          value={manualServicePrice}
+                          onChange={(e) => setManualServicePrice(e.target.value)}
+                          placeholder="Ej: 5000"
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-300 mb-1">
+                          Estado Inicial
+                        </label>
+                        <select
+                          value={manualStatus}
+                          onChange={(e) => setManualStatus(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white bg-zinc-900"
+                        >
+                          <option value="COMPLETED">Completado y Cobrado</option>
+                          <option value="CONFIRMED">Confirmado (Pendiente)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-300 mb-1">
+                        Notas adicionales (opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={manualNotes}
+                        onChange={(e) => setManualNotes(e.target.value)}
+                        placeholder="Ej: Pago en efectivo / Cliente nuevo"
+                        className="w-full px-3 py-2 rounded-xl minimal-input text-xs text-white"
+                      />
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualModal(false)}
+                        className="px-4 py-2 rounded-full border border-zinc-800 text-xs text-zinc-400 hover:text-white"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingManualBooking}
+                        className="px-5 py-2 rounded-full bg-white text-zinc-950 font-semibold text-xs hover:bg-zinc-200 transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {savingManualBooking ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        <span>Guardar Turno</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
           </div>
@@ -1449,6 +2332,33 @@ export default function TenantDashboard() {
                   </div>
                 </div>
 
+                {/* Porcentaje de Comisión */}
+                <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-white flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Porcentaje de Comisión (%)</span>
+                    </label>
+                    <span className="text-[11px] font-mono text-zinc-400">
+                      {staffCommissionPercentage
+                        ? `${staffCommissionPercentage}% del valor del turno`
+                        : "0% (Sueldo fijo / sin comisión)"}
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="Ej: 25 (para 25%), 15, 40, etc."
+                    value={staffCommissionPercentage}
+                    onChange={(e) => setStaffCommissionPercentage(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl minimal-input text-xs text-white font-mono"
+                  />
+                  <p className="text-[11px] text-zinc-500 mt-1 font-light">
+                    Porcentaje que se le asigna a este profesional del valor de cada corte o servicio realizado (ej. 15%, 25%, 40%). Podés modificarlo en cualquier momento.
+                  </p>
+                </div>
+
                 {/* Photo upload for Staff Member */}
                 <div>
                   <label className="block text-xs font-medium text-zinc-300 mb-1.5">
@@ -1598,6 +2508,12 @@ export default function TenantDashboard() {
                             {staff.phone && (
                               <div className="font-mono">📱 {staff.phone}</div>
                             )}
+                            <div className="pt-1 flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-950/40 text-emerald-300 border border-emerald-900/50">
+                                <Percent className="w-3 h-3 text-emerald-400" />
+                                <span>Comisión: {staff.commissionPercentage || 0}%</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1706,6 +2622,27 @@ export default function TenantDashboard() {
                                 placeholder="ej. 5491122334455"
                                 value={editStaffPhone}
                                 onChange={(e) => setEditStaffPhone(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white font-mono"
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] text-zinc-400 flex items-center gap-1">
+                                  <Percent className="w-3 h-3 text-emerald-400" />
+                                  <span>% Comisión</span>
+                                </label>
+                                <span className="text-[10px] font-mono text-zinc-400">
+                                  {editStaffCommissionPercentage ? `${editStaffCommissionPercentage}%` : "0%"}
+                                </span>
+                              </div>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                placeholder="Ej: 25"
+                                value={editStaffCommissionPercentage}
+                                onChange={(e) => setEditStaffCommissionPercentage(e.target.value)}
                                 className="w-full px-3 py-1.5 rounded-lg minimal-input text-xs text-white font-mono"
                               />
                             </div>
