@@ -72,6 +72,8 @@ export async function PUT(req: Request) {
       bankHolder,
       depositNotes,
       cancelNoticeHours,
+      enableReminders,
+      reminderTiming,
     } = body;
 
     const cleanSlug =
@@ -142,6 +144,14 @@ export async function PUT(req: Request) {
         ...(depositNotes !== undefined && { depositNotes: depositNotes ? depositNotes.trim() : null }),
         ...(cancelNoticeHours !== undefined && {
           cancelNoticeHours: Math.max(0, Math.round(Number(cancelNoticeHours) || 0)),
+        }),
+        ...(enableReminders !== undefined && {
+          enableReminders: Boolean(enableReminders),
+        }),
+        ...(reminderTiming !== undefined && {
+          reminderTiming: ["24H", "2H", "BOTH"].includes(reminderTiming)
+            ? reminderTiming
+            : "BOTH",
         }),
       },
     });

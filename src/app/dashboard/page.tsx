@@ -33,6 +33,8 @@ import {
   Wallet,
   CalendarDays,
   RotateCcw,
+  Bell,
+  Send,
 } from "lucide-react";
 import { formatDayName, formatDateSpanish } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-compress";
@@ -89,6 +91,8 @@ interface ProfileData {
   bankHolder: string | null;
   depositNotes: string | null;
   cancelNoticeHours?: number | null;
+  enableReminders?: boolean;
+  reminderTiming?: string;
   availabilities: DaySchedule[];
   services?: ServiceItem[];
   staffMembers?: StaffMemberItem[];
@@ -113,6 +117,8 @@ interface BookingItem {
   depositAmount: number | null;
   managementCode?: string | null;
   cancellationToken?: string | null;
+  reminder24hSent?: boolean;
+  reminder2hSent?: boolean;
   staffMember?: {
     id: string;
     name: string;
@@ -229,6 +235,9 @@ export default function TenantDashboard() {
   const [timezone, setTimezone] = useState("America/Argentina/Buenos_Aires");
   const [slotDuration, setSlotDuration] = useState(30);
   const [cancelNoticeHours, setCancelNoticeHours] = useState(0);
+  const [enableReminders, setEnableReminders] = useState(true);
+  const [reminderTiming, setReminderTiming] = useState("BOTH");
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
   // Form state for 7-day schedule
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
@@ -284,6 +293,8 @@ export default function TenantDashboard() {
           setBankHolder(p.bankHolder || "");
           setDepositNotes(p.depositNotes || "");
           setCancelNoticeHours(p.cancelNoticeHours ?? 0);
+          setEnableReminders(p.enableReminders ?? true);
+          setReminderTiming(p.reminderTiming || "BOTH");
 
           const fullWeek: DaySchedule[] = [];
           for (let day = 0; day <= 6; day++) {
@@ -461,6 +472,31 @@ export default function TenantDashboard() {
       );
     } catch {
       showNotification("error", "No se pudo actualizar el estado de la seña");
+    }
+  };
+
+  const handleSendManualReminder = async (bookingId: string) => {
+    setSendingReminderId(bookingId);
+    try {
+      const res = await fetch(`/api/dashboard/bookings/${bookingId}/reminder`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al enviar recordatorio");
+
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id === bookingId ? { ...b, reminder24hSent: true } : b
+        )
+      );
+      showNotification("success", data.message || "Recordatorio enviado.");
+    } catch (err: unknown) {
+      showNotification(
+        "error",
+        err instanceof Error ? err.message : "Error al enviar recordatorio"
+      );
+    } finally {
+      setSendingReminderId(null);
     }
   };
 
@@ -1367,35 +1403,66 @@ export default function TenantDashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between">
-                      <a
-                        href={`https://wa.me/${b.customerPhone.replace(/[^\d]/g, "")}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1"
-                      >
-                        <Phone className="w-3 h-3" />
-                        <span>Abrir WhatsApp</span>
-                      </a>
+                    <div className="mt-4 pt-3 border-t border-zinc-800 flex flex-col gap-2">
+                      {/* Reminder status / action */}
+                      <div className="flex items-center justify-between text-[11px]">
+                        {b.reminder24hSent || b.reminder2hSent ? (
+                          <span className="flex items-center gap-1 text-emerald-400 font-mono text-[10px]">
+                            <Bell className="w-3 h-3 text-emerald-400" />
+                            <span>Recordatorio enviado</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-500 font-mono">Sin recordatorio</span>
+                        )}
 
-                      {b.status === "CONFIRMED" && (
-                        <div className="flex items-center gap-1">
+                        {b.status === "CONFIRMED" && b.customerEmail && (
                           <button
-                            onClick={() => handleUpdateBookingStatus(b.id, "COMPLETED")}
-                            title="Marcar completado"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                            type="button"
+                            disabled={sendingReminderId === b.id}
+                            onClick={() => handleSendManualReminder(b.id)}
+                            className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-medium transition flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                            title="Enviar correo de recordatorio pre-turno ahora"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            {sendingReminderId === b.id ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <Send className="w-2.5 h-2.5 text-zinc-400" />
+                            )}
+                            <span>{b.reminder24hSent ? "Reenviar aviso" : "Enviar aviso"}</span>
                           </button>
-                          <button
-                            onClick={() => handleUpdateBookingStatus(b.id, "CANCELLED")}
-                            title="Cancelar turno"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400 text-xs"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60">
+                        <a
+                          href={`https://wa.me/${b.customerPhone.replace(/[^\d]/g, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>Abrir WhatsApp</span>
+                        </a>
+
+                        {b.status === "CONFIRMED" && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleUpdateBookingStatus(b.id, "COMPLETED")}
+                              title="Marcar completado"
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleUpdateBookingStatus(b.id, "CANCELLED")}
+                              title="Cancelar turno"
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400 text-xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -2948,6 +3015,76 @@ export default function TenantDashboard() {
                   <option value={48}>Hasta 48 horas antes del turno (2 días)</option>
                 </select>
               </div>
+            </div>
+
+            {/* AUTOMATED PRE-APPOINTMENT REMINDERS CARD */}
+            <div className="rounded-2xl p-5 border border-zinc-800 bg-[#121215]">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-emerald-400" />
+                    <span>Recordatorios Automáticos Pre-Turno (Anti-Ausentismo)</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5 font-light">
+                    Envía un correo automático a tus clientes 24 horas y/o 2 horas antes de la cita con el detalle del turno y botón de autogestión. Reduce el ausentismo (no-shows) hasta un 70%.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveProfile({ enableReminders, reminderTiming })}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50 shrink-0 cursor-pointer"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Guardar Recordatorios</span>
+                </button>
+              </div>
+
+              {/* Toggle switch */}
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 flex items-center justify-between mb-4">
+                <div>
+                  <span className="block text-xs font-semibold text-white">
+                    Activar envíos automáticos de recordatorio
+                  </span>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 font-light">
+                    Tus clientes recibirán el aviso por email para confirmar su asistencia o reprogramar a tiempo.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableReminders}
+                    onChange={(e) => setEnableReminders(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
+              {/* Timing selector */}
+              {enableReminders && (
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-white mb-0.5">
+                      Frecuencia y anticipación:
+                    </label>
+                    <p className="text-[11px] text-zinc-400 font-light max-w-lg leading-relaxed">
+                      Elegí en qué momentos se enviará el recordatorio por correo antes de la hora fijada del turno.
+                    </p>
+                  </div>
+
+                  <select
+                    value={reminderTiming}
+                    onChange={(e) => setReminderTiming(e.target.value)}
+                    className="px-3 py-2 rounded-xl minimal-input text-xs text-white min-w-[280px]"
+                  >
+                    <option value="BOTH">24 hs antes y 2 hs antes (Recomendado - 70% menos ausentismo)</option>
+                    <option value="24H">Solo 24 horas antes del turno</option>
+                    <option value="2H">Solo 2 horas antes del turno</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -67,6 +67,10 @@ model Profile {
   // Cancellation and rescheduling policy
   cancelNoticeHours  Int      @default(0) // Minimum hours in advance to cancel or reschedule (0 = any time)
 
+  // Pre-appointment reminder settings to prevent no-shows
+  enableReminders    Boolean  @default(true)
+  reminderTiming     String   @default("BOTH") // "BOTH" | "24H" | "2H"
+
   availabilities Availability[]
   services       Service[]
   staffMembers   StaffMember[]
@@ -150,10 +154,14 @@ model Booking {
   depositAmount   Int?         // Snapshot of required deposit amount in ARS
   managementCode  String?      // Readable code (e.g. "MK-4892")
   cancellationToken String?    @unique // Secure token for 1-click management link
+  reminder24hSent Boolean      @default(false)
+  reminder2hSent  Boolean      @default(false)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   @@index([profileId, date])
   @@index([profileId, staffMemberId, date])
   @@index([managementCode])
+  @@index([status, reminder24hSent])
+  @@index([status, reminder2hSent])
 }

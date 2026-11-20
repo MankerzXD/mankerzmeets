@@ -697,3 +697,162 @@ export async function sendBookingRescheduledEmails({
   return { ownerSent: Boolean(ownerOk), customerSent: Boolean(customerOk) };
 }
 
+export async function sendBookingReminderEmail({
+  customerEmail,
+  customerName,
+  profileName,
+  profileSlug,
+  whatsapp,
+  serviceName,
+  staffMemberName,
+  formattedDate,
+  date,
+  startTime,
+  endTime,
+  managementCode,
+  manageUrl,
+  reminderType = "24H",
+}: {
+  customerEmail: string;
+  customerName: string;
+  profileName: string;
+  profileSlug: string;
+  whatsapp?: string | null;
+  serviceName?: string | null;
+  staffMemberName?: string | null;
+  formattedDate: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  managementCode?: string | null;
+  manageUrl?: string | null;
+  reminderType?: "24H" | "2H" | "MANUAL";
+}): Promise<boolean> {
+  const { resend, from, appUrl } = getResendConfig();
+
+  const cleanPhone = (whatsapp || "").replace(/[^\d]/g, "");
+  const whatsappUrl =
+    cleanPhone.length >= 8
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+          `Hola ${profileName}, tengo un turno agendado (${managementCode || ""}) para el ${formattedDate} a las ${startTime} hs.`
+        )}`
+      : null;
+
+  const startClean = `${date.replace(/-/g, "")}T${startTime.replace(/:/g, "")}00`;
+  const endClean = `${date.replace(/-/g, "")}T${endTime.replace(/:/g, "")}00`;
+  const calendarTitle = serviceName
+    ? `${serviceName} — ${profileName}`
+    : `Turno con ${profileName}`;
+  const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+    calendarTitle
+  )}&dates=${startClean}/${endClean}&details=${encodeURIComponent(
+    `Turno en ${appUrl}/${profileSlug}`
+  )}`;
+
+  let title = "Recordatorio de tu turno";
+  let subtitle = `¡Hola ${customerName}! Te recordamos tu cita con ${profileName}.`;
+  let subject = `Recordatorio: Tenés un turno con ${profileName} — ${formattedDate} (${startTime} hs)`;
+
+  if (reminderType === "24H") {
+    title = "Tu turno es mañana";
+    subtitle = `¡Hola ${customerName}! Mañana tenés tu cita agendada con ${profileName}.`;
+    subject = `Recordatorio: Tu turno con ${profileName} es mañana (${startTime} hs)`;
+  } else if (reminderType === "2H") {
+    title = "Tu turno es en 2 horas";
+    subtitle = `¡Hola ${customerName}! En un par de horas tenés tu turno con ${profileName}.`;
+    subject = `⏰ En 2 horas: Tu turno con ${profileName} (${startTime} hs)`;
+  }
+
+  const detailsRows: Array<[string, string]> = [
+    ["Profesional / Local", profileName],
+  ];
+  if (serviceName) detailsRows.push(["Servicio", serviceName]);
+  if (staffMemberName) detailsRows.push(["Atendido por", staffMemberName]);
+  detailsRows.push(
+    ["Fecha", formattedDate],
+    ["Horario", `${startTime} a ${endTime} hs`]
+  );
+
+  const summaryRowsHtml = `
+    <div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 16px; margin-bottom: 18px;">
+      ${detailsRows
+        .map(
+          ([label, val], idx) => `
+          <div style="display: flex; justify-content: space-between; font-size: 13px; ${
+            idx > 0
+              ? "margin-top: 10px; padding-top: 10px; border-top: 1px solid #18181b;"
+              : ""
+          }">
+            <span style="color: #71717a;">${escapeHtml(label)}</span>
+            <span style="color: #fafafa; font-weight: 600; text-align: right; margin-left: 12px;">${escapeHtml(
+              val
+            )}</span>
+          </div>
+        `
+        )
+        .join("")}
+    </div>
+  `;
+
+  const html = renderEmailShell({
+    title,
+    subtitle,
+    bodyHtml: `
+      ${
+        managementCode
+          ? `<div style="background-color: #09090b; border: 1px solid #27272a; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 16px;">
+              <span style="font-size: 10px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px;">Código de turno</span>
+              <span style="font-family: monospace; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: 2px;">${escapeHtml(
+                managementCode
+              )}</span>
+            </div>`
+          : ""
+      }
+      ${summaryRowsHtml}
+      <div style="text-align: center;">
+        <a href="${googleCalUrl}" style="display: inline-block; background-color: #ffffff; color: #09090b; text-decoration: none; font-size: 13px; font-weight: 600; padding: 11px 20px; border-radius: 10px; margin-bottom: 10px;">
+          Ver en Google Calendar
+        </a>
+        ${
+          whatsappUrl
+            ? `<br/><a href="${whatsappUrl}" style="display: inline-block; color: #a1a1aa; text-decoration: underline; font-size: 12px; margin-top: 4px;">Escribir al local por WhatsApp</a>`
+            : ""
+        }
+      </div>
+      ${
+        manageUrl
+          ? `<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #27272a; text-align: center;">
+              <p style="font-size: 12px; color: #a1a1aa; margin: 0 0 10px;">
+                ¿Surgió un imprevisto y no vas a poder asistir?
+              </p>
+              <a href="${manageUrl}" style="display: inline-block; background-color: #18181b; color: #f43f5e; border: 1px solid #3f3f46; text-decoration: none; font-size: 12px; font-weight: 600; padding: 10px 18px; border-radius: 10px;">
+                Cancelar o reprogramar mi turno acá
+              </a>
+            </div>`
+          : ""
+      }
+    `,
+    footerText: `Mankerz Meet • ${appUrl}/${profileSlug}`,
+  });
+
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: [customerEmail],
+      subject,
+      html,
+      text: `Recordatorio de turno con ${profileName}: ${formattedDate} de ${startTime} a ${endTime} hs.${
+        managementCode ? ` Código: ${managementCode}.` : ""
+      }${manageUrl ? ` Para cancelar o reprogramar ingresá a: ${manageUrl}` : ""}`,
+    });
+    if (error) {
+      console.error("Resend reminder email error:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Resend reminder email exception:", err);
+    return false;
+  }
+}
+
